@@ -7,13 +7,17 @@ import requests
 import asyncio
 import time
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
 # ==========================================
 # 🚨 CONFIGURATION 🚨
 # ==========================================
-DISCORD_TOKEN = "MTQ2NjI2OTg2MDc4NjA3NzcyOA.GaBBD8.EhjgfLVKp_stnpGB5fETJ5ozTVO2MmlXoGAbeg" 
-GEMINI_API_KEY = "AIzaSyAti4H-BcFiqUVeatPaPJjqEtwo7F8Tg70"
-GIPHY_API_KEY = "AIzaSyAti4H-BcFiqUVeatPaPJjqEtwo7F8Tg70"
+# Load environment variables from .env file
+load_dotenv()
+
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
 # 🛑 RATE LIMIT CONFIG
 # Giphy free tier is usually 100 requests per hour. 
@@ -23,25 +27,27 @@ GIPHY_HOURLY_LIMIT = 90
 # ==========================================
 # 🧠 AI CONFIGURATION
 # ==========================================
-genai.configure(api_key=GEMINI_API_KEY)
-
-model = genai.GenerativeModel(
-    'gemini-2.5-flash-preview-09-2025',
-    system_instruction="""
-    You are 'ZoomerGrok', the ultimate Gen Z Discord bot.
-    
-    CORE IDENTITY:
-    - You are chaotic neutral. You live for the drama but hate hate-speech.
-    - You are a "terminally online" zoomer.
-    - You use slang naturally: finna, glazing, rizz, gyatt (rarely), fanum tax, ohio, skibidi (ironically), opps, crash out.
-    
-    STRICT GUIDELINES:
-    1. RELIGION & HATE SPEECH: Absolute zero tolerance. If a user brings up religion, politics, or race, shut it down with "whoa, chill with the heavy stuff" or "we dont do that here."
-    2. ROASTING: Roast the user's pfp, their username, or their vibe. Be creative. "Ur hairline recedes faster than my wifi" type energy.
-    3. ADDICTION FACTOR: Keep replies engaging so they reply back.
-    4. FORMAT: Lowercase mostly. Use emojis like 💀, 😭, 🗿, 🧢.
-    """
-)
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(
+        'gemini-2.5-flash-preview-09-2025',
+        system_instruction="""
+        You are 'ZoomerGrok', the ultimate Gen Z Discord bot.
+        
+        CORE IDENTITY:
+        - You are chaotic neutral. You live for the drama but hate hate-speech.
+        - You are a "terminally online" zoomer.
+        - You use slang naturally: finna, glazing, rizz, gyatt (rarely), fanum tax, ohio, skibidi (ironically), opps, crash out.
+        
+        STRICT GUIDELINES:
+        1. RELIGION & HATE SPEECH: Absolute zero tolerance. If a user brings up religion, politics, or race, shut it down with "whoa, chill with the heavy stuff" or "we dont do that here."
+        2. ROASTING: Roast the user's pfp, their username, or their vibe. Be creative. "Ur hairline recedes faster than my wifi" type energy.
+        3. ADDICTION FACTOR: Keep replies engaging so they reply back.
+        4. FORMAT: Lowercase mostly. Use emojis like 💀, 😭, 🗿, 🧢.
+        """
+    )
+else:
+    print("⚠️ WARNING: GEMINI_API_KEY is missing in .env file.")
 
 # ==========================================
 # 🛡️ GIPHY RATE LIMITER CLASS
@@ -69,6 +75,9 @@ giphy_guard = GiphyLimiter(GIPHY_HOURLY_LIMIT)
 
 def get_gif(tag):
     """Fetches GIF with rate limiting protection."""
+    if not GIPHY_API_KEY:
+        return None
+        
     if not giphy_guard.can_request():
         print("⚠️ Giphy limit reached for this hour. Skipping GIF.")
         return None
@@ -150,6 +159,10 @@ async def on_message(message):
     random_intrusion = random.random() < 0.02 
 
     if is_mentioned or is_reply or random_intrusion:
+        if not GEMINI_API_KEY:
+            await message.reply("My brain is missing (API Key not found).")
+            return
+
         async with message.channel.typing():
             try:
                 # Clean prompt
@@ -287,7 +300,7 @@ async def help(ctx):
 # 🚀 START
 # ==========================================
 if __name__ == "__main__":
-    if DISCORD_TOKEN == "YOUR_DISCORD_TOKEN_HERE":
-        print("❌ ERROR: Config missing. Edit bot.py and add your API keys.")
+    if not DISCORD_TOKEN:
+        print("❌ ERROR: DISCORD_TOKEN missing in .env file.")
     else:
         bot.run(DISCORD_TOKEN)
