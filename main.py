@@ -20,8 +20,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
 # Model configuration
-# CHANGED: Switched to 'gemini-1.5-flash' for better stability
-MODEL_ID = 'gemini-1.5-flash' 
+# CHANGED: Switched to 'gemini-2.0-flash' to fix 404 errors with 1.5
+MODEL_ID = 'gemini-2.0-flash' 
 
 # 🛑 RATE LIMIT CONFIG
 GIPHY_HOURLY_LIMIT = 90 
