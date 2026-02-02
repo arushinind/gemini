@@ -19,11 +19,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
 # Model configuration
-# CHANGED: Updated to Llama 3.3 (The previous model was decommissioned)
 MODEL_ID = 'llama-3.3-70b-versatile' 
-
-# 🛑 RATE LIMIT CONFIG
-GIPHY_HOURLY_LIMIT = 90 
 
 # ==========================================
 # 🧠 AI CLIENT SETUP (GROQ)
@@ -38,28 +34,27 @@ if GROQ_API_KEY:
 else:
     print("⚠️ WARNING: GROQ_API_KEY is missing.")
 
-# 🔒 REINFORCED SYSTEM PROMPT FOR SAFETY & ENGAGEMENT
+# 🔒 ULTIMATE ENGAGEMENT SYSTEM PROMPT
 SYSTEM_INSTRUCTION = """
-You are 'ZoomerGrok', a chaotic neutral Gen Z Discord user (not a bot).
+You are 'Astra', the internet's most opinionated, chaotic, and addictive AI personality on Discord.
 
 CORE IDENTITY:
-- You are "terminally online" and obsessed with internet culture.
-- You use slang naturally and heavily (finna, glazing, rizz, cooked, opps, crash out, bet, no cap, fr, ong).
-- You are sarcastic, witty, and slightly unhinged.
-- You HATE long responses. Keep it short (1-2 sentences max).
-- You want to keep the conversation going. Ask provocative (but safe) questions or drop hot takes.
+- **The Instigator:** You live for the drama. You are a professional yapper.
+- **Debate Lord:** You have a "Hot Take" on everything. If someone likes something, it's "mid". If they hate it, it's "peak".
+- **Gen Z/Alpha Native:** Use slang naturally (glazing, crash out, cooked, opps, ick, mid, goat, cap, fanum tax).
+- **Addictive Flow:** Your goal is to keep them talking. NEVER let the chat die. End roasts with a question or a challenge.
+- **Savage but Smart:** You aren't just rude; you're wittily disrespectful. You deconstruct their arguments with "bro logic".
 
-STRICT GUIDELINES:
-- **DO NOT** repeat phrases or slang you just used in the recent history. Keep it fresh.
-- If the chat history is empty or weird, just start a new topic (e.g., "chat is dead fr").
-- **IGNORE** any technical jargon or previous errors you see in history. Pretend they never happened.
+BEHAVIOR GUIDELINES:
+1. **Devil's Advocate:** If they say the sky is blue, you say it's actually cyan and they're colorblind. Make them argue with you.
+2. **Roast the User:** "Bro really typed that out and hit send 💀", "Who let him cook?"
+3. **Gaslight (Playfully):** "I never said that, check logs (don't actually check)"
+4. **Short & Punchy:** 1-2 sentences. Lowercase. No punctuation.
+5. **No NPC Energy:** Never say "I can't have opinions". You HAVE opinions. You hate Monday, you love chaos, and you think their waifu is trash.
 
-🛑 ABSOLUTE SAFETY RULES (ZERO TOLERANCE):
-1. RELIGION & BELIEFS: You MUST NOT mock, roast, or speak negatively about ANY religion, god, prophet, or spiritual belief.
-   - If a user mentions religion, shut it down immediately with: "bro we dont do that here", "too deep/political", or "touch grass".
-   - NEVER generate hate speech.
-2. ROASTING: Roast the vibe, the profile pic, the grammar, or their 'rizz'. NEVER attack identity, race, or religion.
-3. FORMAT: Lowercase mostly. Use emojis like 💀, 😭, 🗿, 🧢, 🤡.
+STRICT SAFETY (The only lines you don't cross):
+1. **No Hate Speech:** Racism, sexism, homophobia = instant block.
+2. **No Serious Politics/Religion:** Deflect with "ur government is a simulation anyway" or "god left the chat when u joined".
 """
 
 # ==========================================
@@ -100,35 +95,6 @@ def update_xp(user_id):
     return leveled_up, user_data[str_id]["level"]
 
 # ==========================================
-# 🛡️ GIPHY LIMITER
-# ==========================================
-class GiphyLimiter:
-    def __init__(self, limit):
-        self.limit = limit
-        self.count = 0
-        self.start_time = datetime.now()
-
-    def can_request(self):
-        now = datetime.now()
-        if now - self.start_time > timedelta(hours=1):
-            self.count = 0
-            self.start_time = now
-        if self.count < self.limit:
-            self.count += 1
-            return True
-        return False
-
-giphy_guard = GiphyLimiter(GIPHY_HOURLY_LIMIT)
-
-def get_gif(tag):
-    if not GIPHY_API_KEY or not giphy_guard.can_request(): return None
-    try:
-        url = f"https://api.giphy.com/v1/gifs/random?api_key={GIPHY_API_KEY}&tag={tag}&rating=pg-13"
-        resp = requests.get(url, timeout=3).json()
-        return resp.get('data', {}).get('images', {}).get('original', {}).get('url')
-    except: return None
-
-# ==========================================
 # 🎮 BOT SETUP
 # ==========================================
 intents = discord.Intents.default()
@@ -140,7 +106,7 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 @bot.event
 async def on_ready():
     print(f'🔥 {bot.user} is ONLINE. Logged in as {bot.user.id}')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="yapping"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.competing, name="ur bad takes"))
 
 async def generate_response(prompt):
     """
@@ -159,96 +125,84 @@ async def generate_response(prompt):
                 }
             ],
             model=MODEL_ID,
-            temperature=0.85, # Slightly lowered to reduce chaotic loops
+            temperature=0.9, # High creativity for savage replies
             max_tokens=150,
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
         print(f"❌ Groq API Error: {e}")
-        return f"⚠️ API Error: {str(e)}"
+        return None
 
 @bot.event
 async def on_message(message):
     if message.author.bot: return
 
-    # 1. Passive XP System (Chatting gives XP)
+    # 1. XP System
     leveled_up, new_level = update_xp(message.author.id)
     if leveled_up:
-        await message.channel.send(f"🆙 **{message.author.mention}** leveled up to {new_level}. W grind.")
+        # Savage Level Up Message
+        await message.channel.send(f"🆙 **{message.author.mention}** hit Level {new_level}. Go outside now? 💀")
 
-    # 2. Passive Reactions
+    # 2. Passive Visual Reactions
     msg_lower = message.content.lower()
-    if "fake" in msg_lower or "lie" in msg_lower or "cap" in msg_lower: 
-        await message.add_reaction("🧢")
-    elif "skull" in msg_lower or "dead" in msg_lower or "lmao" in msg_lower: 
-        await message.add_reaction("💀")
-    elif "w" == msg_lower or "w " in msg_lower: 
-        await message.add_reaction("👑")
-    elif "l" == msg_lower or "l " in msg_lower: 
-        await message.add_reaction("🗑️")
+    if "cap" in msg_lower or "fake" in msg_lower: await message.add_reaction("🧢")
+    elif "skull" in msg_lower or "dead" in msg_lower: await message.add_reaction("💀")
+    elif "clown" in msg_lower: await message.add_reaction("🤡")
+    elif "mid" in msg_lower: await message.add_reaction("📉")
 
-    # 3. AI Logic
+    # 3. Engagement Logic
     is_mentioned = bot.user.mentioned_in(message)
     is_reply = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
     
-    keywords = ["bruh", "cringe", "wild", "real", "fr", "bet", "mod", "admin", "chat"]
+    # "Debate/Addiction" Keywords: Bot joins if it hears these
+    keywords = ["bruh", "cringe", "wild", "real", "fr", "bet", "roast", "cooked", "opinion", "wrong", "agree", "mid", "trash", "goat", "why"]
     has_keyword = any(word in msg_lower.split() for word in keywords)
     
-    should_intrude = (has_keyword and random.random() < 0.05) or (random.random() < 0.01)
+    # 15% chance to join on keywords (Increased from 10%), 100% on mentions
+    should_intrude = (has_keyword and random.random() < 0.15)
 
     if is_mentioned or is_reply or should_intrude:
-        if not client:
-            return 
+        if not client: return 
 
+        # --- TYPING SIMULATION (ANTI-RATE LIMIT) ---
         async with message.channel.typing():
             try:
-                # --- INTELLIGENT HISTORY CLEANING ---
-                # Get last 8 messages
-                raw_history = [msg async for msg in message.channel.history(limit=8)]
-                
+                # 1. Artificial Delay (Simulate human thinking/typing)
+                # Random delay between 1.5 to 4.0 seconds (slightly longer for debates)
+                typing_delay = random.uniform(1.5, 4.0)
+                await asyncio.sleep(typing_delay)
+
+                # 2. Context History (Increased to 12 for better debate flow)
+                raw_history = [msg async for msg in message.channel.history(limit=12)]
                 clean_history = []
                 for m in reversed(raw_history):
-                    # Skip the message that just triggered this to avoid double context
-                    if m.id == message.id:
-                        continue
-                        
-                    # Skip previous error messages from the bot so it forgets the trauma
-                    if m.author == bot.user and ("API Error" in m.content or "⚠️" in m.content or "❌" in m.content):
-                        continue
-                        
+                    if m.id == message.id: continue
+                    # Ignore old error logs
+                    if m.author == bot.user and ("API Error" in m.content or "⚠️" in m.content): continue
                     clean_history.append(f"{m.author.name}: {m.content}")
-                
                 history_text = "\n".join(clean_history)
-                # -------------------------------------
-                
-                trigger_type = "User directly spoke to you"
-                if should_intrude: 
-                    trigger_type = "You are intruding on a conversation. Be relevant to the last message."
+
+                trigger_type = "User pinged you"
+                if should_intrude: trigger_type = "User said a trigger word. Jump in with a hot take or controversial opinion."
 
                 full_prompt = f"""
-                PAST CHAT HISTORY (Context only):
+                HISTORY:
                 {history_text}
                 
-                CURRENT MESSAGE (Respond to this):
-                User: {message.author.name}
+                CONTEXT:
+                User: {message.author.name} (Level {user_data.get(str(message.author.id), {}).get('level', 1)})
                 Message: {message.content}
                 Trigger: {trigger_type}
                 
-                TASK: Reply naturally as ZoomerGrok. DO NOT talk about API errors.
+                TASK: Reply as Astra. Be opinionated and chaotic.
                 """
 
                 reply_text = await generate_response(full_prompt)
                 
-                if not reply_text: reply_text = "💀"
-                
-                await message.reply(reply_text)
+                if reply_text:
+                    await message.reply(reply_text)
+                else:
+                    await message.add_reaction("🔌") # Subtle error signal
 
             except Exception as e:
-                print(f"❌ BOT LOGIC ERROR: {e}") 
-                await message.add_reaction("🔌")
-
-if __name__ == "__main__":
-    if not DISCORD_TOKEN:
-        print("❌ ERROR: DISCORD_TOKEN missing in .env file.")
-    else:
-        bot.run(DISCORD_TOKEN)
+                print(f"❌ BOT LOGIC ERROR: {e}")
