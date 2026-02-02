@@ -106,7 +106,16 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 @bot.event
 async def on_ready():
     print(f'🔥 {bot.user} is ONLINE. Logged in as {bot.user.id}')
+    if client:
+        print("✅ Groq AI is READY.")
+    else:
+        print("⚠️ Groq AI is NOT initialized (Check API Key). Bot will not reply.")
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.competing, name="ur bad takes"))
+
+@bot.command()
+async def ping(ctx):
+    """Test command to see if bot is online."""
+    await ctx.send(f"🏓 **Pong!** {round(bot.latency * 1000)}ms\n(I am connected to Discord. If I'm not chatting, check the API Keys.)")
 
 async def generate_response(prompt):
     """
@@ -137,6 +146,9 @@ async def generate_response(prompt):
 async def on_message(message):
     if message.author.bot: return
 
+    # IMPORTANT: This line ensures !ping works even if AI logic follows
+    await bot.process_commands(message)
+
     # 1. XP System
     leveled_up, new_level = update_xp(message.author.id)
     if leveled_up:
@@ -162,7 +174,9 @@ async def on_message(message):
     should_intrude = (has_keyword and random.random() < 0.15)
 
     if is_mentioned or is_reply or should_intrude:
-        if not client: return 
+        if not client:
+            print("❌ Error: Message received, but Groq Client is None. Check GROQ_API_KEY environment variable.")
+            return 
 
         # --- TYPING SIMULATION (ANTI-RATE LIMIT) ---
         async with message.channel.typing():
@@ -206,3 +220,9 @@ async def on_message(message):
 
             except Exception as e:
                 print(f"❌ BOT LOGIC ERROR: {e}")
+
+if __name__ == "__main__":
+    if not DISCORD_TOKEN:
+        print("❌ ERROR: DISCORD_TOKEN missing in .env file.")
+    else:
+        bot.run(DISCORD_TOKEN)
