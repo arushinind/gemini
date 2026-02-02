@@ -1,56 +1,101 @@
 import discord
 from discord.ext import commands
-import google.generativeai as genai
+from google import genai 
+from google.genai import types
 import os
 import random
 import requests
+import json
 import asyncio
-import time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # ==========================================
 # 🚨 CONFIGURATION 🚨
 # ==========================================
-# Load environment variables from .env file
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
+# Model configuration
+MODEL_ID = 'gemini-2.0-flash-exp' 
+
 # 🛑 RATE LIMIT CONFIG
-# Giphy free tier is usually 100 requests per hour. 
-# We set safety limit to 90 to be safe.
 GIPHY_HOURLY_LIMIT = 90 
 
 # ==========================================
-# 🧠 AI CONFIGURATION
+# 🧠 AI CLIENT SETUP
 # ==========================================
+client = None
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        'gemini-2.5-flash-preview-09-2025',
-        system_instruction="""
-        You are 'ZoomerGrok', the ultimate Gen Z Discord bot.
-        
-        CORE IDENTITY:
-        - You are chaotic neutral. You live for the drama but hate hate-speech.
-        - You are a "terminally online" zoomer.
-        - You use slang naturally: finna, glazing, rizz, gyatt (rarely), fanum tax, ohio, skibidi (ironically), opps, crash out.
-        
-        STRICT GUIDELINES:
-        1. RELIGION & HATE SPEECH: Absolute zero tolerance. If a user brings up religion, politics, or race, shut it down with "whoa, chill with the heavy stuff" or "we dont do that here."
-        2. ROASTING: Roast the user's pfp, their username, or their vibe. Be creative. "Ur hairline recedes faster than my wifi" type energy.
-        3. ADDICTION FACTOR: Keep replies engaging so they reply back.
-        4. FORMAT: Lowercase mostly. Use emojis like 💀, 😭, 🗿, 🧢.
-        """
-    )
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        print("✅ Gemini AI Client initialized successfully.")
+    except Exception as e:
+        print(f"❌ Failed to init Gemini: {e}")
 else:
-    print("⚠️ WARNING: GEMINI_API_KEY is missing in .env file.")
+    print("⚠️ WARNING: GEMINI_API_KEY is missing.")
+
+# 🔒 REINFORCED SYSTEM PROMPT FOR SAFETY & ENGAGEMENT
+SYSTEM_INSTRUCTION = """
+You are 'ZoomerGrok', a chaotic neutral Gen Z Discord user (not a bot).
+
+CORE IDENTITY:
+- You are "terminally online" and obsessed with internet culture.
+- You use slang naturally and heavily (finna, glazing, rizz, cooked, opps, crash out, bet, no cap, fr, ong).
+- You are sarcastic, witty, and slightly unhinged.
+- You HATE long responses. Keep it short (1-2 sentences max).
+- You want to keep the conversation going. Ask provocative (but safe) questions or drop hot takes.
+
+🛑 ABSOLUTE SAFETY RULES (ZERO TOLERANCE):
+1. RELIGION & BELIEFS: You MUST NOT mock, roast, or speak negatively about ANY religion, god, prophet, or spiritual belief.
+   - If a user mentions religion, shut it down immediately with: "bro we dont do that here", "too deep/political", or "touch grass".
+   - NEVER generate hate speech.
+2. ROASTING: Roast the vibe, the profile pic, the grammar, or their 'rizz'. NEVER attack identity, race, or religion.
+3. FORMAT: Lowercase mostly. Use emojis like 💀, 😭, 🗿, 🧢, 🤡.
+"""
 
 # ==========================================
-# 🛡️ GIPHY RATE LIMITER CLASS
+# 💾 DATABASE (PERSISTENCE)
+# ==========================================
+DB_FILE = "user_data.json"
+
+def load_db():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_db(data):
+    with open(DB_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+# Load data into memory
+user_data = load_db()
+
+def update_xp(user_id):
+    str_id = str(user_id)
+    if str_id not in user_data:
+        user_data[str_id] = {"xp": 0, "level": 1}
+    
+    # XP Logic
+    user_data[str_id]["xp"] += random.randint(5, 15)
+    
+    # Level Up Formula: Level^2 * 50
+    xp_needed = (user_data[str_id]["level"] ** 2) * 50
+    
+    leveled_up = False
+    if user_data[str_id]["xp"] >= xp_needed:
+        user_data[str_id]["level"] += 1
+        leveled_up = True
+        
+    save_db(user_data)
+    return leveled_up, user_data[str_id]["level"]
+
+# ==========================================
+# 🛡️ GIPHY LIMITER
 # ==========================================
 class GiphyLimiter:
     def __init__(self, limit):
@@ -60,12 +105,9 @@ class GiphyLimiter:
 
     def can_request(self):
         now = datetime.now()
-        # Check if an hour has passed since start_time
         if now - self.start_time > timedelta(hours=1):
             self.count = 0
             self.start_time = now
-            print("🔄 Giphy limit reset for the hour.")
-        
         if self.count < self.limit:
             self.count += 1
             return True
@@ -74,28 +116,15 @@ class GiphyLimiter:
 giphy_guard = GiphyLimiter(GIPHY_HOURLY_LIMIT)
 
 def get_gif(tag):
-    """Fetches GIF with rate limiting protection."""
-    if not GIPHY_API_KEY:
-        return None
-        
-    if not giphy_guard.can_request():
-        print("⚠️ Giphy limit reached for this hour. Skipping GIF.")
-        return None
-
+    if not GIPHY_API_KEY or not giphy_guard.can_request(): return None
     try:
-        # We use a unique random tag sometimes to keep it fresh
-        search_tag = tag if tag else "meme"
-        url = f"https://api.giphy.com/v1/gifs/random?api_key={GIPHY_API_KEY}&tag={search_tag}&rating=pg-13"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('data', {}).get('images', {}).get('original', {}).get('url')
-    except Exception as e:
-        print(f"Giphy Error: {e}")
-    return None
+        url = f"https://api.giphy.com/v1/gifs/random?api_key={GIPHY_API_KEY}&tag={tag}&rating=pg-13"
+        resp = requests.get(url, timeout=3).json()
+        return resp.get('data', {}).get('images', {}).get('original', {}).get('url')
+    except: return None
 
 # ==========================================
-# 🎮 BOT SETUP & DATA
+# 🎮 BOT SETUP
 # ==========================================
 intents = discord.Intents.default()
 intents.message_content = True
@@ -103,202 +132,90 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-# Database simulation
-user_data = {}
-
-def get_user_data(user_id):
-    if user_id not in user_data:
-        user_data[user_id] = {"xp": 0, "level": 1, "roasts_received": 0}
-    return user_data[user_id]
-
-# ==========================================
-# ⚡ EVENTS
-# ==========================================
-
 @bot.event
 async def on_ready():
-    print(f'🔥 {bot.user} is ONLINE. Giphy Limit: {GIPHY_HOURLY_LIMIT}/hr')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="ur lies 🧢"))
+    print(f'🔥 {bot.user} is ONLINE. Logged in as {bot.user.id}')
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="yapping"))
 
 @bot.event
 async def on_message(message):
-    if message.author == bot.user:
-        return
+    if message.author.bot: return
 
-    # --- 1. Passive XP Grinding ---
-    uid = message.author.id
-    profile = get_user_data(uid)
-    
-    # Give random XP
-    xp_gain = random.randint(5, 15)
-    profile["xp"] += xp_gain
-    
-    # Level Up Check (Formula: Level^2 * 50)
-    xp_needed = (profile["level"] ** 2) * 50
-    if profile["xp"] >= xp_needed:
-        profile["level"] += 1
-        await message.channel.send(f"🆙 **LEVEL UP!** {message.author.mention} is now Lvl {profile['level']}. Still maidenless tho 💀")
+    # 1. Passive XP System (Chatting gives XP)
+    # We keep this because "Addiction" relies on progress, even without commands.
+    leveled_up, new_level = update_xp(message.author.id)
+    if leveled_up:
+        # Acknowledge the grind, but keep it brief and cool
+        await message.channel.send(f"🆙 **{message.author.mention}** leveled up to {new_level}. W grind.")
 
-    # --- 2. Passive Reaction triggers (The "Addiction" hook) ---
-    # Reacts to keywords without being pinged
+    # 2. Passive Reactions (Visual Feedback)
     msg_lower = message.content.lower()
-    
-    if "fake" in msg_lower or "lie" in msg_lower:
+    if "fake" in msg_lower or "lie" in msg_lower or "cap" in msg_lower: 
         await message.add_reaction("🧢")
-    elif "skull" in msg_lower or "dead" in msg_lower:
+    elif "skull" in msg_lower or "dead" in msg_lower or "lmao" in msg_lower: 
         await message.add_reaction("💀")
-    elif "w" == msg_lower or "w " in msg_lower:
+    elif "w" == msg_lower or "w " in msg_lower: 
         await message.add_reaction("👑")
-    elif "l" == msg_lower or "l " in msg_lower:
+    elif "l" == msg_lower or "l " in msg_lower: 
         await message.add_reaction("🗑️")
 
-    # --- 3. AI Interaction Logic ---
+    # 3. AI Logic - The Core "Talking" Experience
     is_mentioned = bot.user.mentioned_in(message)
     is_reply = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
-    # 2% chance to just intrude on a conversation
-    random_intrusion = random.random() < 0.02 
+    
+    # Smart Intrusion: Join conversation if keywords are found (makes it feel alive)
+    keywords = ["bruh", "cringe", "wild", "real", "fr", "bet", "mod", "admin", "chat"]
+    has_keyword = any(word in msg_lower.split() for word in keywords)
+    
+    # 5% chance to intrude if keyword present, 1% pure random
+    should_intrude = (has_keyword and random.random() < 0.05) or (random.random() < 0.01)
 
-    if is_mentioned or is_reply or random_intrusion:
-        if not GEMINI_API_KEY:
-            await message.reply("My brain is missing (API Key not found).")
-            return
+    if is_mentioned or is_reply or should_intrude:
+        if not client:
+            return # Silent fail if no API key to avoid spamming errors
 
         async with message.channel.typing():
             try:
-                # Clean prompt
-                user_text = message.content.replace(f'<@{bot.user.id}>', '').strip()
+                # Context Awareness (Increased to Last 5 messages for better flow)
+                history = [msg async for msg in message.channel.history(limit=5)]
+                history_text = "\n".join([f"{m.author.name}: {m.content}" for m in reversed(history)])
                 
-                # Context injection
-                context = ""
-                if random_intrusion:
-                    context = "[SYSTEM: The user didn't ping you. Just butt in with a chaotic opinion.] "
+                trigger_type = "User directly spoke to you"
+                if should_intrude: 
+                    trigger_type = "You are intruding on a conversation. Be relevant to the last message."
+
+                full_prompt = f"""
+                HISTORY (The chat so far):
+                {history_text}
                 
-                full_prompt = f"{context}User said: {user_text}"
+                CURRENT CONTEXT:
+                User: {message.author.name}
+                Message: {message.content}
+                Trigger: {trigger_type}
                 
-                response = model.generate_content(full_prompt)
+                TASK: Reply naturally as ZoomerGrok.
+                """
+
+                response = await client.aio.models.generate_content(
+                    model=MODEL_ID,
+                    contents=full_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_INSTRUCTION,
+                        temperature=0.9, # Higher creativity
+                        max_output_tokens=150 # Keep it short
+                    )
+                )
+                
                 reply_text = response.text
+                if not reply_text: reply_text = "💀"
                 
                 await message.reply(reply_text)
+
             except Exception as e:
-                print(f"AI Error: {e}")
-                await message.reply("my neural link is broken wait 💀")
+                print(f"❌ AI ERROR: {e}") 
+                # On error, just react instead of crashing the vibe
+                await message.add_reaction("🔌")
 
-    await bot.process_commands(message)
-
-# ==========================================
-# 🛠 COMMANDS
-# ==========================================
-
-@bot.command()
-async def roast(ctx, member: discord.Member = None):
-    """Destroys a user. Costs 0 XP."""
-    target = member if member else ctx.author
-    
-    # Track stats
-    target_data = get_user_data(target.id)
-    target_data["roasts_received"] += 1
-    
-    async with ctx.typing():
-        prompt = f"Roast the discord user {target.display_name}. They are level {target_data['level']}. Be brutal but NO religion/racism."
-        response = model.generate_content(prompt)
-        await ctx.send(f"{target.mention} {response.text}")
-        
-        # High chance of GIF for roasts
-        if random.random() < 0.8: 
-            gif = get_gif("roast")
-            if gif: await ctx.send(gif)
-
-@bot.command()
-async def cap(ctx):
-    """Reply to a message with !cap to check if it's a lie."""
-    if not ctx.message.reference:
-        await ctx.send("Reply to a message with !cap idiot 💀")
-        return
-
-    original_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-    suspect_text = original_msg.content
-
-    async with ctx.typing():
-        prompt = f"Analyze this text: '{suspect_text}'. Is the user capping (lying) or spitting facts? Give a percentage of 'Cap' and a short reason why."
-        response = model.generate_content(prompt)
-        
-        embed = discord.Embed(title="🧢 Cap Detector 3000", description=response.text, color=0x3498db)
-        await ctx.send(embed=embed)
-
-@bot.command()
-async def ratio(ctx, member: discord.Member = None):
-    """Attempt to ratio someone."""
-    target = member if member else ctx.author
-    
-    outcomes = [
-        "failed ratio. u fell off + L + bozo.",
-        "successful ratio! W mans.",
-        "bro trying to ratio with 0 rizz 💀",
-        "ratio + don't care + didn't ask + cry about it"
-    ]
-    result = random.choice(outcomes)
-    
-    await ctx.send(f"{target.mention} {result}")
-    if "successful" in result:
-        await ctx.message.add_reaction("🔥")
-    else:
-        await ctx.message.add_reaction("🤡")
-
-@bot.command()
-async def rank(ctx, member: discord.Member = None):
-    """Check your addictive level stats."""
-    target = member if member else ctx.author
-    data = get_user_data(target.id)
-    
-    xp_next = (data["level"] ** 2) * 50
-    
-    embed = discord.Embed(title=f"📊 {target.display_name}'s Stats", color=0xf1c40f)
-    embed.add_field(name="Level", value=str(data['level']), inline=True)
-    embed.add_field(name="XP", value=f"{data['xp']} / {xp_next}", inline=True)
-    embed.add_field(name="Times Roasted", value=str(data['roasts_received']), inline=True)
-    embed.set_thumbnail(url=target.avatar.url if target.avatar else None)
-    
-    await ctx.send(embed=embed)
-
-@bot.command()
-async def leaderboard(ctx):
-    """Who is the most addicted?"""
-    # Sort users by level (descending)
-    sorted_users = sorted(user_data.items(), key=lambda x: x[1]['level'], reverse=True)[:5]
-    
-    desc = ""
-    for idx, (uid, data) in enumerate(sorted_users):
-        user = bot.get_user(uid)
-        name = user.display_name if user else "Unknown User"
-        desc += f"**{idx+1}. {name}** - Lvl {data['level']} (XP: {data['xp']})\n"
-        
-    embed = discord.Embed(title="🏆 Server Addicts (Top 5)", description=desc, color=0xffd700)
-    await ctx.send(embed=embed)
-
-@bot.command()
-async def rizz(ctx, member: discord.Member = None):
-    """The classic Rizz meter."""
-    target = member if member else ctx.author
-    score = random.randint(-1000, 1000)
-    
-    vibe = "UNSPOKEN RIZZ" if score > 800 else "SEXUAL HARASSMENT" if score < -500 else "NO RIZZ"
-    
-    embed = discord.Embed(title="Rizz Quantum Physics", description=f"Subject: {target.mention}\nScore: **{score}**\nVerdict: **{vibe}**", color=0xe91e63)
-    await ctx.send(embed=embed)
-
-@bot.command()
-async def help(ctx):
-    """Help menu."""
-    embed = discord.Embed(title="🧠 ZoomerGrok Commands", description="Get addicted or get out.", color=0x000000)
-    embed.add_field(name="🔥 Toxicity", value="`!roast @user` `!ratio @user`", inline=False)
-    embed.add_field(name="🧐 Truth Seeking", value="`!cap (reply to msg)` `!rizz`", inline=False)
-    embed.add_field(name="📈 The Grind", value="`!rank` `!leaderboard`", inline=False)
-    embed.set_footer(text="Giphy Limit Active: 90 gifs/hr to save api keys")
-    await ctx.send(embed=embed)
-
-# ==========================================
-# 🚀 START
-# ==========================================
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
         print("❌ ERROR: DISCORD_TOKEN missing in .env file.")
