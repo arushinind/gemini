@@ -49,6 +49,11 @@ CORE IDENTITY:
 - You HATE long responses. Keep it short (1-2 sentences max).
 - You want to keep the conversation going. Ask provocative (but safe) questions or drop hot takes.
 
+STRICT GUIDELINES:
+- **DO NOT** repeat phrases or slang you just used in the recent history. Keep it fresh.
+- If the chat history is empty or weird, just start a new topic (e.g., "chat is dead fr").
+- **IGNORE** any technical jargon or previous errors you see in history. Pretend they never happened.
+
 🛑 ABSOLUTE SAFETY RULES (ZERO TOLERANCE):
 1. RELIGION & BELIEFS: You MUST NOT mock, roast, or speak negatively about ANY religion, god, prophet, or spiritual belief.
    - If a user mentions religion, shut it down immediately with: "bro we dont do that here", "too deep/political", or "touch grass".
@@ -154,7 +159,7 @@ async def generate_response(prompt):
                 }
             ],
             model=MODEL_ID,
-            temperature=0.9,
+            temperature=0.85, # Slightly lowered to reduce chaotic loops
             max_tokens=150,
         )
         return chat_completion.choices[0].message.content
@@ -169,10 +174,9 @@ async def on_message(message):
     # 1. Passive XP System (Chatting gives XP)
     leveled_up, new_level = update_xp(message.author.id)
     if leveled_up:
-        # Acknowledge the grind, but keep it brief and cool
         await message.channel.send(f"🆙 **{message.author.mention}** leveled up to {new_level}. W grind.")
 
-    # 2. Passive Reactions (Visual Feedback)
+    # 2. Passive Reactions
     msg_lower = message.content.lower()
     if "fake" in msg_lower or "lie" in msg_lower or "cap" in msg_lower: 
         await message.add_reaction("🧢")
@@ -183,15 +187,13 @@ async def on_message(message):
     elif "l" == msg_lower or "l " in msg_lower: 
         await message.add_reaction("🗑️")
 
-    # 3. AI Logic - The Core "Talking" Experience
+    # 3. AI Logic
     is_mentioned = bot.user.mentioned_in(message)
     is_reply = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
     
-    # Smart Intrusion: Join conversation if keywords are found
     keywords = ["bruh", "cringe", "wild", "real", "fr", "bet", "mod", "admin", "chat"]
     has_keyword = any(word in msg_lower.split() for word in keywords)
     
-    # 5% chance to intrude if keyword present, 1% pure random
     should_intrude = (has_keyword and random.random() < 0.05) or (random.random() < 0.01)
 
     if is_mentioned or is_reply or should_intrude:
@@ -200,24 +202,39 @@ async def on_message(message):
 
         async with message.channel.typing():
             try:
-                # Context Awareness (Last 5 messages)
-                history = [msg async for msg in message.channel.history(limit=5)]
-                history_text = "\n".join([f"{m.author.name}: {m.content}" for m in reversed(history)])
+                # --- INTELLIGENT HISTORY CLEANING ---
+                # Get last 8 messages
+                raw_history = [msg async for msg in message.channel.history(limit=8)]
+                
+                clean_history = []
+                for m in reversed(raw_history):
+                    # Skip the message that just triggered this to avoid double context
+                    if m.id == message.id:
+                        continue
+                        
+                    # Skip previous error messages from the bot so it forgets the trauma
+                    if m.author == bot.user and ("API Error" in m.content or "⚠️" in m.content or "❌" in m.content):
+                        continue
+                        
+                    clean_history.append(f"{m.author.name}: {m.content}")
+                
+                history_text = "\n".join(clean_history)
+                # -------------------------------------
                 
                 trigger_type = "User directly spoke to you"
                 if should_intrude: 
                     trigger_type = "You are intruding on a conversation. Be relevant to the last message."
 
                 full_prompt = f"""
-                HISTORY (The chat so far):
+                PAST CHAT HISTORY (Context only):
                 {history_text}
                 
-                CURRENT CONTEXT:
+                CURRENT MESSAGE (Respond to this):
                 User: {message.author.name}
                 Message: {message.content}
                 Trigger: {trigger_type}
                 
-                TASK: Reply naturally as ZoomerGrok.
+                TASK: Reply naturally as ZoomerGrok. DO NOT talk about API errors.
                 """
 
                 reply_text = await generate_response(full_prompt)
