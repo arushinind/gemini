@@ -19,8 +19,8 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
 # Model configuration
-# Groq supports Llama 3 which is great for chat
-MODEL_ID = 'llama3-70b-8192' 
+# CHANGED: Updated to Llama 3.3 (The previous model was decommissioned)
+MODEL_ID = 'llama-3.3-70b-versatile' 
 
 # 🛑 RATE LIMIT CONFIG
 GIPHY_HOURLY_LIMIT = 90 
