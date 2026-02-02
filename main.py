@@ -20,7 +20,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
 # Model configuration
-MODEL_ID = 'gemini-2.0-flash-exp' 
+# CHANGED: Switched to 'gemini-1.5-flash' for better stability
+MODEL_ID = 'gemini-1.5-flash' 
 
 # 🛑 RATE LIMIT CONFIG
 GIPHY_HOURLY_LIMIT = 90 
@@ -142,7 +143,6 @@ async def on_message(message):
     if message.author.bot: return
 
     # 1. Passive XP System (Chatting gives XP)
-    # We keep this because "Addiction" relies on progress, even without commands.
     leveled_up, new_level = update_xp(message.author.id)
     if leveled_up:
         # Acknowledge the grind, but keep it brief and cool
@@ -163,7 +163,7 @@ async def on_message(message):
     is_mentioned = bot.user.mentioned_in(message)
     is_reply = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
     
-    # Smart Intrusion: Join conversation if keywords are found (makes it feel alive)
+    # Smart Intrusion: Join conversation if keywords are found
     keywords = ["bruh", "cringe", "wild", "real", "fr", "bet", "mod", "admin", "chat"]
     has_keyword = any(word in msg_lower.split() for word in keywords)
     
@@ -172,11 +172,11 @@ async def on_message(message):
 
     if is_mentioned or is_reply or should_intrude:
         if not client:
-            return # Silent fail if no API key to avoid spamming errors
+            return 
 
         async with message.channel.typing():
             try:
-                # Context Awareness (Increased to Last 5 messages for better flow)
+                # Context Awareness (Last 5 messages)
                 history = [msg async for msg in message.channel.history(limit=5)]
                 history_text = "\n".join([f"{m.author.name}: {m.content}" for m in reversed(history)])
                 
@@ -213,7 +213,8 @@ async def on_message(message):
 
             except Exception as e:
                 print(f"❌ AI ERROR: {e}") 
-                # On error, just react instead of crashing the vibe
+                # CHANGED: Now it tells you what happened!
+                await message.reply(f"⚠️ **AI Error:** {str(e)}\n*(Check console/API Key)*")
                 await message.add_reaction("🔌")
 
 if __name__ == "__main__":
