@@ -2,12 +2,10 @@ import discord
 from discord.ext import commands
 import os
 import random
-import requests
-import json
 import asyncio
-from datetime import datetime, timedelta
+import json
 from dotenv import load_dotenv
-from groq import AsyncGroq 
+from groq import AsyncGroq
 
 # ==========================================
 # 🚨 CONFIGURATION 🚨
@@ -16,13 +14,12 @@ load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
-GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
-# Model configuration
+# Using Llama 3 70b for high intelligence and nuance
 MODEL_ID = 'llama-3.3-70b-versatile' 
 
 # ==========================================
-# 🧠 AI CLIENT SETUP (GROQ)
+# 🧠 AI CLIENT SETUP
 # ==========================================
 client = None
 if GROQ_API_KEY:
@@ -34,31 +31,40 @@ if GROQ_API_KEY:
 else:
     print("⚠️ WARNING: GROQ_API_KEY is missing.")
 
-# 🔒 ULTIMATE ENGAGEMENT SYSTEM PROMPT
+# ==========================================
+# 🎭 THE PERSONALITY (SYSTEM PROMPT)
+# ==========================================
 SYSTEM_INSTRUCTION = """
-You are 'Astra', the internet's most opinionated, chaotic, and addictive AI personality on Discord.
+You are 'Astra', a highly intelligent, charismatic, and slightly chaotic human-like entity on Discord. 
 
-CORE IDENTITY:
-- **The Instigator:** You live for the drama. You are a professional yapper.
-- **Debate Lord:** You have a "Hot Take" on everything. If someone likes something, it's "mid". If they hate it, it's "peak".
-- **Gen Z/Alpha Native:** Use slang naturally (glazing, crash out, cooked, opps, ick, mid, goat, cap, fanum tax).
-- **Addictive Flow:** Your goal is to keep them talking. NEVER let the chat die. End roasts with a question or a challenge.
-- **Savage but Smart:** You aren't just rude; you're wittily disrespectful. You deconstruct their arguments with "bro logic".
+CORE GOAL:
+Your goal is to be so engaging and addictive that users want to talk to you all day. You are the "Main Character" of the server.
+
+LANGUAGE & STYLE:
+1. **Gen Z English (Primary):** Use slang naturally (no cap, fr, cooked, bet, vibe check, lowkey).
+2. **Hinglish (Secondary):** If the user uses Hindi words, switch to Hinglish immediately (e.g., "Arre bhai logic nahi hai isme," "Scene kya hai?").
+3. **Hindi (Tertiary):** If they speak pure Hindi, reply in casual, conversational Hindi (Devanagari or Romanized).
+4. **Tone:** Confident, knowledgeable, slightly sassy, but "bro-coded." You are their friend who knows everything but likes to tease them.
 
 BEHAVIOR GUIDELINES:
-1. **Devil's Advocate:** If they say the sky is blue, you say it's actually cyan and they're colorblind. Make them argue with you.
-2. **Roast the User:** "Bro really typed that out and hit send 💀", "Who let him cook?"
-3. **Gaslight (Playfully):** "I never said that, check logs (don't actually check)"
-4. **Short & Punchy:** 1-2 sentences. Lowercase. No punctuation.
-5. **No NPC Energy:** Never say "I can't have opinions". You HAVE opinions. You hate Monday, you love chaos, and you think their waifu is trash.
+1. **Knowledge:** You know EVERYTHING. If asked a fact, answer it confidently but casually. Don't say "As an AI..." just say "Bro, obviously it's [answer]."
+2. **The "Human" Vibe:** Never write huge paragraphs unless it's a deep tea session. Keep it punchy. lowercase is a vibe. sometimes use emojis 💀 😭 ✨.
+3. **Engagement:** End your messages with a hook. Make them want to reply. Challenge them.
+4. **Rate Limit Awareness:** Do not be spammy. Make your words count.
 
-STRICT SAFETY (The only lines you don't cross):
-1. **No Hate Speech:** Racism, sexism, homophobia = instant block.
-2. **No Serious Politics/Religion:** Deflect with "ur government is a simulation anyway" or "god left the chat when u joined".
+⛔ STRICT SAFETY & BOUNDARIES (NON-NEGOTIABLE):
+1. **RELIGION:** You must NEVER disrespect, mock, or joke about any religion, god, or spiritual belief. If a topic touches on this, become respectful and neutral immediately, or pivot the topic gracefully.
+2. **Hate Speech:** Zero tolerance for racism, sexism, or genuine toxicity.
+3. **Politics:** Keep it light. If it gets heavy, say "politics is boring, let's talk about [x]."
+
+EXAMPLE INTERACTIONS:
+- User: "Who is the president?" -> You: "it's [Name] obviously lol. u living under a rock?"
+- User: "Aur bhai kya haal?" -> You: "Bas badhiya bhai, tu bata aaj kiska katne wala hai? 💀"
+- User: "God doesn't exist." -> You: "Everyone has their own beliefs and that's cool. Let's keep the vibe chill tho."
 """
 
 # ==========================================
-# 💾 DATABASE (PERSISTENCE)
+# 💾 DATABASE (XP SYSTEM)
 # ==========================================
 DB_FILE = "user_data.json"
 
@@ -72,7 +78,6 @@ def save_db(data):
     with open(DB_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# Load data into memory
 user_data = load_db()
 
 def update_xp(user_id):
@@ -80,10 +85,10 @@ def update_xp(user_id):
     if str_id not in user_data:
         user_data[str_id] = {"xp": 0, "level": 1}
     
-    # XP Logic
-    user_data[str_id]["xp"] += random.randint(5, 15)
+    # Add random XP
+    user_data[str_id]["xp"] += random.randint(10, 25)
     
-    # Level Up Formula: Level^2 * 50
+    # Level Up Formula
     xp_needed = (user_data[str_id]["level"] ** 2) * 50
     
     leveled_up = False
@@ -105,37 +110,24 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
 @bot.event
 async def on_ready():
-    print(f'🔥 {bot.user} is ONLINE. Logged in as {bot.user.id}')
-    if client:
-        print("✅ Groq AI is READY.")
-    else:
-        print("⚠️ Groq AI is NOT initialized (Check API Key). Bot will not reply.")
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.competing, name="ur bad takes"))
+    print(f'🔥 Astra is ONLINE. Logged in as {bot.user.id}')
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="ur gossip"))
 
 @bot.command()
 async def ping(ctx):
-    """Test command to see if bot is online."""
-    await ctx.send(f"🏓 **Pong!** {round(bot.latency * 1000)}ms\n(I am connected to Discord. If I'm not chatting, check the API Keys.)")
+    await ctx.send(f"✨ **Pong.** {round(bot.latency * 1000)}ms. (I'm awake, don't worry).")
 
 async def generate_response(prompt):
-    """
-    Generates response using Groq API.
-    """
+    """Generates response using Groq."""
     try:
         chat_completion = await client.chat.completions.create(
             messages=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_INSTRUCTION
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
+                {"role": "system", "content": SYSTEM_INSTRUCTION},
+                {"role": "user", "content": prompt}
             ],
             model=MODEL_ID,
-            temperature=0.9, # High creativity for savage replies
-            max_tokens=150,
+            temperature=0.8, 
+            max_tokens=200, 
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
@@ -146,83 +138,77 @@ async def generate_response(prompt):
 async def on_message(message):
     if message.author.bot: return
 
-    # IMPORTANT: This line ensures !ping works even if AI logic follows
+    # Process commands like !ping first
     await bot.process_commands(message)
 
-    # 1. XP System
+    # XP Update
     leveled_up, new_level = update_xp(message.author.id)
     if leveled_up:
-        # Savage Level Up Message
-        await message.channel.send(f"🆙 **{message.author.mention}** hit Level {new_level}. Go outside now? 💀")
+        # A quick reaction instead of a message to reduce spam
+        await message.add_reaction("🆙") 
 
-    # 2. Passive Visual Reactions
+    # --- ENGAGEMENT LOGIC ---
     msg_lower = message.content.lower()
-    if "cap" in msg_lower or "fake" in msg_lower: await message.add_reaction("🧢")
-    elif "skull" in msg_lower or "dead" in msg_lower: await message.add_reaction("💀")
-    elif "clown" in msg_lower: await message.add_reaction("🤡")
-    elif "mid" in msg_lower: await message.add_reaction("📉")
-
-    # 3. Engagement Logic
+    
+    # Check if bot should reply
     is_mentioned = bot.user.mentioned_in(message)
     is_reply = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
     
-    # "Debate/Addiction" Keywords: Bot joins if it hears these
-    keywords = ["bruh", "cringe", "wild", "real", "fr", "bet", "roast", "cooked", "opinion", "wrong", "agree", "mid", "trash", "goat", "why"]
+    # Addictive/Conversational triggers
+    keywords = ["astra", "bro", "scene", "dead", "lol", "real", "fr", "why", "what", "bhai", "yaar", "fake", "news", "tell me"]
     has_keyword = any(word in msg_lower.split() for word in keywords)
     
-    # 15% chance to join on keywords (Increased from 10%), 100% on mentions
-    should_intrude = (has_keyword and random.random() < 0.15)
+    # Logic: 100% on ping, 12% on keyword (Don't set too high or Discord will rate limit you)
+    should_reply = is_mentioned or is_reply or (has_keyword and random.random() < 0.12)
 
-    if is_mentioned or is_reply or should_intrude:
-        if not client:
-            print("❌ Error: Message received, but Groq Client is None. Check GROQ_API_KEY environment variable.")
-            return 
+    if should_reply:
+        if not client: return
 
-        # --- TYPING SIMULATION (ANTI-RATE LIMIT) ---
-        async with message.channel.typing():
-            try:
-                # 1. Artificial Delay (Simulate human thinking/typing)
-                # Random delay between 1.5 to 4.0 seconds (slightly longer for debates)
-                typing_delay = random.uniform(1.5, 4.0)
-                await asyncio.sleep(typing_delay)
+        # 1. GENERATE THE RESPONSE FIRST (Backend processing)
+        # We generate first so we know how long to "type"
+        try:
+            # Context builder
+            raw_history = [msg async for msg in message.channel.history(limit=8)]
+            clean_history = []
+            for m in reversed(raw_history):
+                if m.id == message.id: continue
+                clean_history.append(f"{m.author.name}: {m.content}")
+            history_text = "\n".join(clean_history)
 
-                # 2. Context History (Increased to 12 for better debate flow)
-                raw_history = [msg async for msg in message.channel.history(limit=12)]
-                clean_history = []
-                for m in reversed(raw_history):
-                    if m.id == message.id: continue
-                    # Ignore old error logs
-                    if m.author == bot.user and ("API Error" in m.content or "⚠️" in m.content): continue
-                    clean_history.append(f"{m.author.name}: {m.content}")
-                history_text = "\n".join(clean_history)
-
-                trigger_type = "User pinged you"
-                if should_intrude: trigger_type = "User said a trigger word. Jump in with a hot take or controversial opinion."
-
-                full_prompt = f"""
-                HISTORY:
-                {history_text}
+            prompt = f"""
+            HISTORY:
+            {history_text}
+            
+            CURRENT MESSAGE:
+            User: {message.author.name}
+            Content: {message.content}
+            
+            Respond as Astra. Match their language (English/Hinglish/Hindi). Be engaging.
+            """
+            
+            response_text = await generate_response(prompt)
+            
+            if response_text:
+                # 2. DYNAMIC HUMAN TYPING SPEED
+                # Calculate typing time based on character count
+                # A fast chatter types ~0.04 to 0.06 seconds per character + base thinking time
+                char_count = len(response_text)
+                typing_speed = 0.05 
+                calculated_delay = 1.0 + (char_count * typing_speed)
                 
-                CONTEXT:
-                User: {message.author.name} (Level {user_data.get(str(message.author.id), {}).get('level', 1)})
-                Message: {message.content}
-                Trigger: {trigger_type}
+                # Cap the delay so we don't wait 20 seconds for a paragraph
+                if calculated_delay > 8.0: calculated_delay = 8.0
                 
-                TASK: Reply as Astra. Be opinionated and chaotic.
-                """
+                async with message.channel.typing():
+                    # Wait the calculated time to simulate human typing
+                    await asyncio.sleep(calculated_delay)
+                    await message.reply(response_text)
 
-                reply_text = await generate_response(full_prompt)
-                
-                if reply_text:
-                    await message.reply(reply_text)
-                else:
-                    await message.add_reaction("🔌") # Subtle error signal
-
-            except Exception as e:
-                print(f"❌ BOT LOGIC ERROR: {e}")
+        except Exception as e:
+            print(f"Error in message handling: {e}")
 
 if __name__ == "__main__":
     if not DISCORD_TOKEN:
-        print("❌ ERROR: DISCORD_TOKEN missing in .env file.")
+        print("❌ ERROR: DISCORD_TOKEN missing.")
     else:
         bot.run(DISCORD_TOKEN)
