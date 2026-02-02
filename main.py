@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-import openai 
 import os
 import random
 import requests
@@ -8,6 +7,7 @@ import json
 import asyncio
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from groq import AsyncGroq 
 
 # ==========================================
 # 🚨 CONFIGURATION 🚨
@@ -15,30 +15,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-# CHANGED: Now using OpenAI API Key
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
 # Model configuration
-# CHANGED: Using 'gpt-4o-mini' (Fast & Cost-effective replacement for Gemini Flash)
-MODEL_ID = 'gpt-4o-mini' 
+# Groq supports Llama 3 which is great for chat
+MODEL_ID = 'llama3-70b-8192' 
 
 # 🛑 RATE LIMIT CONFIG
 GIPHY_HOURLY_LIMIT = 90 
 
 # ==========================================
-# 🧠 AI CLIENT SETUP (OPENAI)
+# 🧠 AI CLIENT SETUP (GROQ)
 # ==========================================
 client = None
-if OPENAI_API_KEY:
+if GROQ_API_KEY:
     try:
-        # Initialize Async OpenAI Client
-        client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
-        print("✅ OpenAI Client initialized successfully.")
+        client = AsyncGroq(api_key=GROQ_API_KEY)
+        print("✅ Groq Client initialized successfully.")
     except Exception as e:
-        print(f"❌ Failed to init OpenAI: {e}")
+        print(f"❌ Failed to init Groq: {e}")
 else:
-    print("⚠️ WARNING: OPENAI_API_KEY is missing.")
+    print("⚠️ WARNING: GROQ_API_KEY is missing.")
 
 # 🔒 REINFORCED SYSTEM PROMPT FOR SAFETY & ENGAGEMENT
 SYSTEM_INSTRUCTION = """
@@ -139,6 +137,31 @@ async def on_ready():
     print(f'🔥 {bot.user} is ONLINE. Logged in as {bot.user.id}')
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="yapping"))
 
+async def generate_response(prompt):
+    """
+    Generates response using Groq API.
+    """
+    try:
+        chat_completion = await client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": SYSTEM_INSTRUCTION
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            model=MODEL_ID,
+            temperature=0.9,
+            max_tokens=150,
+        )
+        return chat_completion.choices[0].message.content
+    except Exception as e:
+        print(f"❌ Groq API Error: {e}")
+        return f"⚠️ API Error: {str(e)}"
+
 @bot.event
 async def on_message(message):
     if message.author.bot: return
@@ -197,25 +220,14 @@ async def on_message(message):
                 TASK: Reply naturally as ZoomerGrok.
                 """
 
-                # CHANGED: OpenAI Chat Completion Call
-                response = await client.chat.completions.create(
-                    model=MODEL_ID,
-                    messages=[
-                        {"role": "system", "content": SYSTEM_INSTRUCTION},
-                        {"role": "user", "content": full_prompt}
-                    ],
-                    temperature=0.9, # Higher creativity
-                    max_tokens=150   # Keep it short
-                )
+                reply_text = await generate_response(full_prompt)
                 
-                reply_text = response.choices[0].message.content
                 if not reply_text: reply_text = "💀"
                 
                 await message.reply(reply_text)
 
             except Exception as e:
-                print(f"❌ AI ERROR: {e}") 
-                await message.reply(f"⚠️ **AI Error:** {str(e)}\n*(Check console/API Key)*")
+                print(f"❌ BOT LOGIC ERROR: {e}") 
                 await message.add_reaction("🔌")
 
 if __name__ == "__main__":
