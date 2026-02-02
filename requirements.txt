@@ -2,5 +2,6 @@ discord.py==2.3.2
 google-generativeai
 requests
 python-dotenv
-google-genai
+openai
 requests
+
