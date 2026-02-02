@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
-from google import genai 
-from google.genai import types
+import openai 
 import os
 import random
 import requests
@@ -16,28 +15,30 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# CHANGED: Now using OpenAI API Key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") 
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
 # Model configuration
-# CHANGED: Switched to 'gemini-2.0-flash' to fix 404 errors with 1.5
-MODEL_ID = 'gemini-2.0-flash' 
+# CHANGED: Using 'gpt-4o-mini' (Fast & Cost-effective replacement for Gemini Flash)
+MODEL_ID = 'gpt-4o-mini' 
 
 # 🛑 RATE LIMIT CONFIG
 GIPHY_HOURLY_LIMIT = 90 
 
 # ==========================================
-# 🧠 AI CLIENT SETUP
+# 🧠 AI CLIENT SETUP (OPENAI)
 # ==========================================
 client = None
-if GEMINI_API_KEY:
+if OPENAI_API_KEY:
     try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        print("✅ Gemini AI Client initialized successfully.")
+        # Initialize Async OpenAI Client
+        client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
+        print("✅ OpenAI Client initialized successfully.")
     except Exception as e:
-        print(f"❌ Failed to init Gemini: {e}")
+        print(f"❌ Failed to init OpenAI: {e}")
 else:
-    print("⚠️ WARNING: GEMINI_API_KEY is missing.")
+    print("⚠️ WARNING: OPENAI_API_KEY is missing.")
 
 # 🔒 REINFORCED SYSTEM PROMPT FOR SAFETY & ENGAGEMENT
 SYSTEM_INSTRUCTION = """
@@ -196,24 +197,24 @@ async def on_message(message):
                 TASK: Reply naturally as ZoomerGrok.
                 """
 
-                response = await client.aio.models.generate_content(
+                # CHANGED: OpenAI Chat Completion Call
+                response = await client.chat.completions.create(
                     model=MODEL_ID,
-                    contents=full_prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_INSTRUCTION,
-                        temperature=0.9, # Higher creativity
-                        max_output_tokens=150 # Keep it short
-                    )
+                    messages=[
+                        {"role": "system", "content": SYSTEM_INSTRUCTION},
+                        {"role": "user", "content": full_prompt}
+                    ],
+                    temperature=0.9, # Higher creativity
+                    max_tokens=150   # Keep it short
                 )
                 
-                reply_text = response.text
+                reply_text = response.choices[0].message.content
                 if not reply_text: reply_text = "💀"
                 
                 await message.reply(reply_text)
 
             except Exception as e:
                 print(f"❌ AI ERROR: {e}") 
-                # CHANGED: Now it tells you what happened!
                 await message.reply(f"⚠️ **AI Error:** {str(e)}\n*(Check console/API Key)*")
                 await message.add_reaction("🔌")
 
