@@ -23,7 +23,6 @@ MODEL_ID = 'llama-3.3-70b-versatile'
 
 # 💀 DEAD CHAT SETTINGS
 TARGET_CHANNEL_ID = 1464972400524394557
-REVIVE_ROLE_NAME = "⚚《 Chat Pings 》⚚"
 INACTIVITY_THRESHOLD_MINUTES = 30  # Time before chat is considered "dead"
 
 # ==========================================
@@ -164,18 +163,13 @@ async def check_dead_chat():
     if minutes_inactive > INACTIVITY_THRESHOLD_MINUTES and not has_pinged_dead_chat:
         channel = bot.get_channel(TARGET_CHANNEL_ID)
         if channel:
-            # Find the role to ping
-            role = discord.utils.get(channel.guild.roles, name=REVIVE_ROLE_NAME)
-            # STRICTLY only ping the role. If not found, ping NO ONE.
-            ping_str = role.mention if role else ""
-            
-            # Astra-style revive messages
+            # Astra-style revive messages (No Pings)
             revive_msgs = [
-                f"this chat is deeper in sleep than me during lectures 💀 {ping_str} wake up",
-                f"dead chat alert. someone say something interesting or im leaving. {ping_str}",
-                f"wow so quiet... is everyone studying or just ignoring me? {ping_str}",
-                f"hello??? *echoes* {ping_str} scene kya hai?",
-                f"bro this chat is drier than my dms 😭 {ping_str}"
+                f"this chat is deeper in sleep than me during lectures 💀 wake up",
+                f"dead chat alert. someone say something interesting or im leaving.",
+                f"wow so quiet... is everyone studying or just ignoring me?",
+                f"hello??? *echoes* scene kya hai?",
+                f"bro this chat is drier than my dms 😭"
             ]
             
             await channel.send(random.choice(revive_msgs))
