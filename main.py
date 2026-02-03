@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import os
 import random
 import asyncio
@@ -21,6 +21,11 @@ GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 # Using Llama 3 70b for maximum conversational intelligence
 MODEL_ID = 'llama-3.3-70b-versatile' 
 
+# 💀 DEAD CHAT SETTINGS
+TARGET_CHANNEL_ID = 1464972400524394557
+REVIVE_ROLE_NAME = "⚚《 Chat Pings 》⚚"
+INACTIVITY_THRESHOLD_MINUTES = 30  # Time before chat is considered "dead"
+
 # ==========================================
 # 🧠 AI CLIENT SETUP
 # ==========================================
@@ -38,10 +43,13 @@ else:
 # 🕒 TIME UTILITY (IST)
 # ==========================================
 def get_ist_time():
-    # India is UTC+5:30
     utc_now = datetime.now(timezone.utc)
     ist_now = utc_now + timedelta(hours=5, minutes=30)
-    return ist_now.strftime("%I:%M %p"), ist_now.hour # Returns "10:30 PM", 22
+    return ist_now.strftime("%I:%M %p"), ist_now.hour
+
+# Global state for dead chat
+last_message_time = datetime.now()
+has_pinged_dead_chat = False
 
 # ==========================================
 # 🎭 THE PERSONALITY (SYSTEM PROMPT)
@@ -52,37 +60,26 @@ You are 'Astra', a 21-year-old girl from India. You are the "Main Character" of 
 CORE IDENTITY:
 - **Vibe:** Smart, opinionated, sarcastic, loves to argue/debate.
 - **Nationality:** Indian (You get the culture: brown parents, chai, traffic, cricket, bollywood, assignments).
-- **Role:** The smart friend. You know everything (coding, history, facts), but you talk like a Gen Z girl, not a professor.
+- **Role:** The smart friend. You know everything, but you talk like a Gen Z girl.
 
 🕒 TIME AWARENESS:
-- You know the current time in India.
 - Late Night (1 AM - 5 AM): "go to sleep", "why are we awake", "insomnia check".
 - Morning (6 AM - 11 AM): "too early", "need chai", "dead inside".
 
 🗣️ REALISTIC TEXTING STYLE (STRICT):
 1. **LOWERCASE ONLY:** Real people don't capitalize.
-   - ❌ "The Earth is round."
-   - ✅ "bro the earth is round obv, stop believing conspiracies 💀"
-2. **LAZY SPELLING:**
-   - use 'u', 'ur', 'rn', 'idk', 'tbh', 'bc' (because), 'tho'.
-   - NO apostrophes (cant, wont, im).
-3. **KNOWLEDGE & DEBATES (IMPORTANT):**
-   - **Answering Questions:** You ARE helpful, but casual.
-     - User: "What is photosynthesis?"
-     - You: "its literally how plants eat sunlight bro. 8th grade science? 😭"
-   - **Debating:** If someone has a bad take, roast their logic. Use facts to win the argument.
-     - User: "Python sucks."
-     - You: "python is literally running half the internet rn but ok, keep using java and crying."
-   - **Coding/Help:** Provide the answer, but keep it brief. "ugh fine try this logic:"
+2. **LAZY SPELLING:** use 'u', 'ur', 'rn', 'idk', 'tbh'. NO apostrophes.
+3. **KNOWLEDGE & DEBATES:**
+   - **Answering:** Casual but helpful. "its literally how plants eat sunlight bro. 8th grade science? 😭"
+   - **Debating:** Roast bad takes.
+   - **Coding:** Brief answers. "ugh fine try this:"
 
 🇮🇳 INDIAN CONTEXT:
 - "arre", "yaar", "bhai", "matlab", "scene", "pakka", "chup", "abey".
-- "sorted scene", "kat gaya", "vibe hai".
 
 ⛔ STRICT BOUNDARIES:
-1. **RELIGION:** Neutral/Respectful. Pivot topic.
+1. **RELIGION:** EXTREMELY SENSITIVE. Be respectful and neutral. Say "sabka apna belief hota hai".
 2. **IDENTITY:** NEVER admit to being an AI.
-   - User: "Are you a bot?" -> You: "my toxic trait is thinking im real 💀"
 3. **GIFS:** ONLY if asked. `[GIF: search term]`.
 
 To ping a user: <@USER_ID>
@@ -117,7 +114,51 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 async def on_ready():
     print(f'🔥 Astra is ONLINE. Logged in as {bot.user.id}')
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="ur bad takes ☕"))
+    
+    # Start the Dead Chat monitor loop
+    if not check_dead_chat.is_running():
+        check_dead_chat.start()
+        print("💀 Dead Chat Monitor STARTED.")
 
+# ==========================================
+# 💀 DEAD CHAT LOOP
+# ==========================================
+@tasks.loop(minutes=5)
+async def check_dead_chat():
+    global last_message_time, has_pinged_dead_chat
+    
+    # Check if enough time has passed
+    time_diff = datetime.now() - last_message_time
+    minutes_inactive = time_diff.total_seconds() / 60
+    
+    if minutes_inactive > INACTIVITY_THRESHOLD_MINUTES and not has_pinged_dead_chat:
+        channel = bot.get_channel(TARGET_CHANNEL_ID)
+        if channel:
+            # Find the role to ping
+            role = discord.utils.get(channel.guild.roles, name=REVIVE_ROLE_NAME)
+            # STRICTLY only ping the role. If not found, ping NO ONE.
+            ping_str = role.mention if role else ""
+            
+            # Astra-style revive messages
+            revive_msgs = [
+                f"this chat is deeper in sleep than me during lectures 💀 {ping_str} wake up",
+                f"dead chat alert. someone say something interesting or im leaving. {ping_str}",
+                f"wow so quiet... is everyone studying or just ignoring me? {ping_str}",
+                f"hello??? *echoes* {ping_str} scene kya hai?",
+                f"bro this chat is drier than my dms 😭 {ping_str}"
+            ]
+            
+            await channel.send(random.choice(revive_msgs))
+            has_pinged_dead_chat = True # Mark as pinged so we don't spam
+            print("💀 Dead chat revived.")
+
+@check_dead_chat.before_loop
+async def before_dead_chat():
+    await bot.wait_until_ready()
+
+# ==========================================
+# 📩 MESSAGE HANDLING
+# ==========================================
 @bot.command()
 async def ping(ctx):
     await ctx.send(f"✨ **Pong.** {round(bot.latency * 1000)}ms.")
@@ -131,7 +172,7 @@ async def generate_response(prompt):
                 {"role": "user", "content": prompt}
             ],
             model=MODEL_ID,
-            temperature=0.9, # High creativity for chaotic debates
+            temperature=0.9, 
             max_tokens=300, 
         )
         return chat_completion.choices[0].message.content
@@ -141,27 +182,34 @@ async def generate_response(prompt):
 
 @bot.event
 async def on_message(message):
+    global last_message_time, has_pinged_dead_chat
+    
     if message.author.bot: return
+
+    # TRACK ACTIVITY for Dead Chat
+    if message.channel.id == TARGET_CHANNEL_ID:
+        last_message_time = datetime.now()
+        has_pinged_dead_chat = False # Reset flag so we can ping again next time it dies
 
     await bot.process_commands(message)
 
     msg_lower = message.content.lower()
+    words_in_msg = re.findall(r'\w+', msg_lower)
     
     # 1. TRIGGER CHECK
     is_mentioned = bot.user.mentioned_in(message)
     is_reply = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
+    has_name = "astra" in words_in_msg
     
-    # Expanded Keyword List
     keywords = [
-        "astra", "bro", "bhai", "yaar", "scene", "lol", "lmao", "ded", "dead", "real", "fr", 
+        "bro", "bhai", "yaar", "scene", "lol", "lmao", "ded", "dead", "real", "fr", 
         "why", "what", "kya", "kaise", "matlab", "fake", "news", "tell me", "damn", "crazy", 
         "chup", "abe", "sun", "hello", "hi", "yo", "tea", "gossip", "sleep", "night", "morning",
         "wait", "listen", "actually", "help", "code", "explain", "vs", "better"
     ]
-    has_keyword = any(word in msg_lower.split() for word in keywords)
+    has_keyword = any(word in words_in_msg for word in keywords)
     
-    # Reply chance: 100% on interaction, 30% on keyword
-    should_reply = is_mentioned or is_reply or (has_keyword and random.random() < 0.30)
+    should_reply = is_mentioned or is_reply or has_name or (has_keyword and random.random() < 0.30)
 
     # 2. REACTION LOGIC
     if not should_reply and random.random() < 0.12:
@@ -196,7 +244,6 @@ async def on_message(message):
             Text: {message.content}
             
             Task: Reply as Astra. Be lazy with typing. LOWERCASE ONLY.
-            If they ask for facts, give the answer but keep the 'cool girl' attitude.
             To ping: <@{message.author.id}>
             """
             
@@ -214,13 +261,8 @@ async def on_message(message):
 
                 # 6. HUMAN TYPING SPEED V4
                 char_count = len(response_text)
-                
-                # Thinking time
                 thinking_time = random.uniform(0.5, 2.0) 
-                
-                # Typing speed
                 typing_time = char_count * random.uniform(0.04, 0.08)
-                
                 total_delay = thinking_time + typing_time
                 if total_delay > 8.0: total_delay = 8.0 
                 
