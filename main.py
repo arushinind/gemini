@@ -63,9 +63,8 @@ You are NOT an assistant. You are NOT a writer. You are just a girl texting on h
 **CORE RULES FOR BEING HUMAN:**
 1.  **CONTEXT IS QUEEN:**
     - **READ THE CHAT HISTORY.** Don't just reply to the last message.
-    - If they are talking about a movie, talk about the movie.
-    - If they are fighting, either grab popcorn or diffuse it.
-    - Don't change the topic randomly.
+    - **MEMORY RESET:** If the history shows "--- MEMORY RESET BY USER ---", do NOT reference anything before that line. Act like the conversation just started.
+    - If the user says "forget", confirm it ("ok forgotten", "done", "what were we talkin about again?").
 
 2.  **IMPERFECT GRAMMAR (CRITICAL):**
     - stop using punctuation mostly. periods at the end of messages look fake.
@@ -85,7 +84,6 @@ You are NOT an assistant. You are NOT a writer. You are just a girl texting on h
     - *Example:* "arre dont worry about it" (Natural)
     - *Example:* "kya scene hai aaj?" (Natural)
     - *Example:* "tu pagal hai kya?" (Natural)
-    - **Never translate:** If you are thinking in Hindi, type in Hinglish.
     - **Typos:** Don't copy user typos. If they say "namsakr", you say "namaste".
 
 5.  **ATTITUDE & EMOTION:**
@@ -238,7 +236,8 @@ async def on_message(message):
         "bro", "bhai", "yaar", "scene", "lol", "lmao", "ded", "dead", "real", "fr", 
         "why", "what", "kya", "kaise", "matlab", "fake", "news", "tell me", "damn", "crazy", 
         "sun", "hello", "hi", "yo", "tea", "gossip", "sleep", "night", "morning",
-        "wait", "listen", "actually", "help", "code", "explain", "vs", "better", "best", "worst"
+        "wait", "listen", "actually", "help", "code", "explain", "vs", "better", "best", "worst",
+        "forget" # Added to keywords to ensure it triggers
     ]
     has_keyword = any(word in words_in_msg for word in keywords)
     
@@ -255,17 +254,38 @@ async def on_message(message):
         if not client: return
 
         try:
-            # 3. CONTEXT BUILDER (Increased to 30)
+            # 3. CONTEXT BUILDER (With Forget Logic)
             time_str, hour = get_ist_time()
             
-            # Increased limit to 30 to understand deeper context
-            raw_history = [msg async for msg in message.channel.history(limit=30)]
-            clean_history = []
-            for m in reversed(raw_history):
-                if m.id == message.id: continue
-                if m.content.startswith("!"): continue 
-                clean_history.append(f"{m.author.name} (ID: {m.author.id}): {m.content}")
-            history_text = "\n".join(clean_history)
+            # Check if CURRENT message is a reset command (and not "don't forget")
+            is_current_reset = False
+            if re.search(r'\bforget\b', msg_lower) and "don't" not in msg_lower and "dont" not in msg_lower:
+                 is_current_reset = True
+            
+            history_text = ""
+            
+            if is_current_reset:
+                history_text = "--- MEMORY RESET BY USER (User just said forget) ---"
+            else:
+                # If current message is NOT a reset, fetch history and look for past resets
+                raw_history = [msg async for msg in message.channel.history(limit=30)]
+                clean_history = []
+                
+                for m in raw_history:
+                    if m.id == message.id: continue
+                    if m.content.startswith("!"): continue 
+                    
+                    content_lower = m.content.lower()
+                    # Check for past resets to truncate history
+                    if re.search(r'\bforget\b', content_lower) and "don't" not in content_lower and "dont" not in content_lower:
+                        clean_history.append("--- MEMORY RESET BY USER ---")
+                        # Stop processing older messages
+                        break
+                        
+                    clean_history.append(f"{m.author.name} (ID: {m.author.id}): {m.content}")
+                
+                # Reverse to make it chronological (Oldest -> Newest)
+                history_text = "\n".join(reversed(clean_history))
 
             prompt = f"""
             CURRENT TIME IN INDIA: {time_str}
@@ -277,10 +297,10 @@ async def on_message(message):
             User: {message.author.name} (ID: {message.author.id})
             Text: {message.content}
             
-            Task: Reply as Astra. BE ENGAGING.
-            - Read the HISTORY to understand the topic.
-            - **Ask follow-up questions** if the user is interesting. Don't be a dead end.
-            - **Do NOT copy typos** (e.g. namsakr -> namaste).
+            Task: Reply as Astra. BE ENGAGING BUT CHILL.
+            - **DO NOT INTERROGATE.** Ask max 1 question, or ZERO questions.
+            - **VARY LENGTH:** Don't write the same length every time. Be unpredictable.
+            - **READ HISTORY:** Don't repeat topics.
             - LAZY TYPING (No periods, lowercase).
             - **GIFS:** If they ask for one, YOU MUST SEND IT.
             To ping: <@{message.author.id}>
