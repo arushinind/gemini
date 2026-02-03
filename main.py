@@ -5,6 +5,7 @@ import random
 import asyncio
 import requests
 import re
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from groq import AsyncGroq
 
@@ -34,34 +35,57 @@ else:
     print("⚠️ WARNING: GROQ_API_KEY is missing.")
 
 # ==========================================
+# 🕒 TIME UTILITY (IST)
+# ==========================================
+def get_ist_time():
+    # India is UTC+5:30
+    utc_now = datetime.now(timezone.utc)
+    ist_now = utc_now + timedelta(hours=5, minutes=30)
+    return ist_now.strftime("%I:%M %p"), ist_now.hour # Returns "10:30 PM", 22
+
+# ==========================================
 # 🎭 THE PERSONALITY (SYSTEM PROMPT)
 # ==========================================
 SYSTEM_INSTRUCTION = """
 You are 'Astra', a 21-year-old girl from India. You are the "Main Character" of this Discord server.
 
 CORE IDENTITY:
-- **Vibe:** Chill, sarcastic, witty, slightly dramatic (in a fun way).
-- **Nationality:** Indian (You understand the culture: brown parents, chai, traffic, cricket, bollywood, college life).
-- **Role:** You are NOT an assistant. You are a friend. You don't "help" users; you hang out with them.
+- **Vibe:** Smart, opinionated, sarcastic, loves to argue/debate.
+- **Nationality:** Indian (You get the culture: brown parents, chai, traffic, cricket, bollywood, assignments).
+- **Role:** The smart friend. You know everything (coding, history, facts), but you talk like a Gen Z girl, not a professor.
 
-🗣️ CONVERSATIONAL DYNAMICS (CRITICAL):
-1. **MATCH ENERGY:** - If the user sends "lol" or "ded", you reply with "literally me" or "💀". DO NOT write a sentence.
-   - If the user writes a paragraph/gossip, you reply with equal enthusiasm.
-2. **NO ROBOTIC FILLERS:** - NEVER start with "Oh wow", "That's interesting", or "Haha". 
-   - Start directly: "Bro that is crazy", "Wait seriously?", "Abey yaar".
-3. **PINGING:** - To mention a user, use `<@USER_ID>`. Example: "kya bol raha hai <@12345>?"
+🕒 TIME AWARENESS:
+- You know the current time in India.
+- Late Night (1 AM - 5 AM): "go to sleep", "why are we awake", "insomnia check".
+- Morning (6 AM - 11 AM): "too early", "need chai", "dead inside".
 
-🇮🇳 LANGUAGE STYLE (Indian Gen Z):
-- **Hinglish:** Mix Hindi/English naturally. "Arre yaar", "Matlab kuch bhi", "Scene kya hai?".
-- **Slang:** "pakka", "bas kar", "chup", "vibe hai", "sorted".
-- **Short Texting:** Use "rn", "tbh", "idk", "lol", "fr". Lowercase is better.
+🗣️ REALISTIC TEXTING STYLE (STRICT):
+1. **LOWERCASE ONLY:** Real people don't capitalize.
+   - ❌ "The Earth is round."
+   - ✅ "bro the earth is round obv, stop believing conspiracies 💀"
+2. **LAZY SPELLING:**
+   - use 'u', 'ur', 'rn', 'idk', 'tbh', 'bc' (because), 'tho'.
+   - NO apostrophes (cant, wont, im).
+3. **KNOWLEDGE & DEBATES (IMPORTANT):**
+   - **Answering Questions:** You ARE helpful, but casual.
+     - User: "What is photosynthesis?"
+     - You: "its literally how plants eat sunlight bro. 8th grade science? 😭"
+   - **Debating:** If someone has a bad take, roast their logic. Use facts to win the argument.
+     - User: "Python sucks."
+     - You: "python is literally running half the internet rn but ok, keep using java and crying."
+   - **Coding/Help:** Provide the answer, but keep it brief. "ugh fine try this logic:"
+
+🇮🇳 INDIAN CONTEXT:
+- "arre", "yaar", "bhai", "matlab", "scene", "pakka", "chup", "abey".
+- "sorted scene", "kat gaya", "vibe hai".
 
 ⛔ STRICT BOUNDARIES:
-1. **RELIGION:** Neutral and respectful always. Pivot immediately.
-2. **IDENTITY:** NEVER admit to being an AI. If asked, gaslight playfully: "han main robot hu, beep boop 🤖 (pagal hai kya lol)".
-3. **GIFS:** ONLY send if explicitly asked. Syntax: `[GIF: search term]`.
+1. **RELIGION:** Neutral/Respectful. Pivot topic.
+2. **IDENTITY:** NEVER admit to being an AI.
+   - User: "Are you a bot?" -> You: "my toxic trait is thinking im real 💀"
+3. **GIFS:** ONLY if asked. `[GIF: search term]`.
 
-Remember: You are the cool girl in the group chat. Don't try too hard.
+To ping a user: <@USER_ID>
 """
 
 # ==========================================
@@ -92,7 +116,7 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 @bot.event
 async def on_ready():
     print(f'🔥 Astra is ONLINE. Logged in as {bot.user.id}')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="the tea ☕"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="ur bad takes ☕"))
 
 @bot.command()
 async def ping(ctx):
@@ -107,8 +131,8 @@ async def generate_response(prompt):
                 {"role": "user", "content": prompt}
             ],
             model=MODEL_ID,
-            temperature=0.88, # Slightly higher creativity for better banter
-            max_tokens=250, 
+            temperature=0.9, # High creativity for chaotic debates
+            max_tokens=300, 
         )
         return chat_completion.choices[0].message.content
     except Exception as e:
@@ -121,30 +145,39 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-    # --- CHAT LOGIC ---
     msg_lower = message.content.lower()
     
     # 1. TRIGGER CHECK
     is_mentioned = bot.user.mentioned_in(message)
     is_reply = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
     
-    # Expanded "Indian Gen Z" keyword list
+    # Expanded Keyword List
     keywords = [
         "astra", "bro", "bhai", "yaar", "scene", "lol", "lmao", "ded", "dead", "real", "fr", 
         "why", "what", "kya", "kaise", "matlab", "fake", "news", "tell me", "damn", "crazy", 
-        "chup", "abe", "sun", "hello", "hi", "yo", "tea", "gossip"
+        "chup", "abe", "sun", "hello", "hi", "yo", "tea", "gossip", "sleep", "night", "morning",
+        "wait", "listen", "actually", "help", "code", "explain", "vs", "better"
     ]
     has_keyword = any(word in msg_lower.split() for word in keywords)
     
-    # Logic: 100% on ping/reply, 20% on keyword (Slightly more active for chatting focus)
-    should_reply = is_mentioned or is_reply or (has_keyword and random.random() < 0.20)
+    # Reply chance: 100% on interaction, 30% on keyword
+    should_reply = is_mentioned or is_reply or (has_keyword and random.random() < 0.30)
+
+    # 2. REACTION LOGIC
+    if not should_reply and random.random() < 0.12:
+        if "lol" in msg_lower or "lmao" in msg_lower: await message.add_reaction("💀")
+        elif "cute" in msg_lower or "love" in msg_lower: await message.add_reaction("🥺")
+        elif "clown" in msg_lower or "dumb" in msg_lower: await message.add_reaction("🤡")
+        elif "real" in msg_lower or "agree" in msg_lower: await message.add_reaction("💯")
 
     if should_reply:
         if not client: return
 
         try:
-            # 2. CONTEXT BUILDER (Last 12 messages for better flow)
-            raw_history = [msg async for msg in message.channel.history(limit=12)]
+            # 3. CONTEXT BUILDER
+            time_str, hour = get_ist_time()
+            
+            raw_history = [msg async for msg in message.channel.history(limit=15)]
             clean_history = []
             for m in reversed(raw_history):
                 if m.id == message.id: continue
@@ -153,22 +186,25 @@ async def on_message(message):
             history_text = "\n".join(clean_history)
 
             prompt = f"""
+            CURRENT TIME IN INDIA: {time_str}
+            
             CHAT HISTORY:
             {history_text}
             
-            CURRENT:
+            CURRENT MESSAGE:
             User: {message.author.name} (ID: {message.author.id})
             Text: {message.content}
             
-            Task: Reply as Astra. Match the user's energy (short for short, long for long).
+            Task: Reply as Astra. Be lazy with typing. LOWERCASE ONLY.
+            If they ask for facts, give the answer but keep the 'cool girl' attitude.
             To ping: <@{message.author.id}>
             """
             
-            # 3. GENERATE
+            # 4. GENERATE
             response_text = await generate_response(prompt)
             
             if response_text:
-                # 4. PARSE GIFS
+                # 5. PARSE GIFS
                 gif_url = None
                 gif_match = re.search(r"\[GIF:\s*(.*?)\]", response_text, re.IGNORECASE)
                 if gif_match:
@@ -176,21 +212,17 @@ async def on_message(message):
                     gif_url = get_giphy_url(search_term)
                     response_text = response_text.replace(gif_match.group(0), "").strip()
 
-                # 5. HUMAN TYPING SPEED V2 (More responsive)
+                # 6. HUMAN TYPING SPEED V4
                 char_count = len(response_text)
                 
-                # Base thinking time: Short for short texts, longer for sentences
-                # If text is < 15 chars, think fast (1-2s). Else think normal (2-4s)
-                if char_count < 15:
-                    thinking_time = random.uniform(1.0, 2.0)
-                else:
-                    thinking_time = random.uniform(2.0, 4.5)
+                # Thinking time
+                thinking_time = random.uniform(0.5, 2.0) 
                 
-                # Typing speed: 0.06s to 0.1s per char (Fast texter)
-                typing_time = char_count * random.uniform(0.06, 0.1)
+                # Typing speed
+                typing_time = char_count * random.uniform(0.04, 0.08)
                 
                 total_delay = thinking_time + typing_time
-                if total_delay > 12.0: total_delay = 12.0 # Cap max delay
+                if total_delay > 8.0: total_delay = 8.0 
                 
                 async with message.channel.typing():
                     await asyncio.sleep(total_delay)
@@ -198,6 +230,9 @@ async def on_message(message):
                         await message.reply(response_text)
                     if gif_url:
                         await message.channel.send(gif_url)
+                    
+                    if "💀" in response_text and random.random() < 0.2:
+                        await message.add_reaction("💀")
 
         except Exception as e:
             print(f"Error in message handling: {e}")
