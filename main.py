@@ -5,6 +5,7 @@ import random
 import asyncio
 import requests
 import re
+import itertools
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from groq import AsyncGroq
@@ -16,8 +17,27 @@ load_dotenv()
 
 # Load Secrets
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
+
+# --- KEY ROTATION LOGIC ---
+# Load multiple keys separated by commas (e.g., key1,key2,key3)
+GROQ_API_KEYS_RAW = os.getenv("GROQ_API_KEYS") or os.getenv("GROQ_API_KEY")
+available_clients = []
+client_pool = None
+
+if GROQ_API_KEYS_RAW:
+    key_list = [k.strip() for k in GROQ_API_KEYS_RAW.split(',') if k.strip()]
+    if key_list:
+        try:
+            available_clients = [AsyncGroq(api_key=k) for k in key_list]
+            client_pool = itertools.cycle(available_clients) # Infinite iterator
+            print(f"✅ Loaded {len(available_clients)} Groq API Keys. Rotation Active.")
+        except Exception as e:
+            print(f"❌ Failed to init Groq Clients: {e}")
+    else:
+        print("⚠️ WARNING: GROQ_API_KEYS found but empty.")
+else:
+    print("⚠️ WARNING: GROQ_API_KEYS missing. Bot will not reply.")
 
 # Load Settings
 TARGET_CHANNEL_ID = 1464972400524394557
@@ -30,15 +50,7 @@ VISION_MODEL_ID = 'llama-3.2-11b-vision-preview'
 # ==========================================
 # 🔌 CLIENT SETUP
 # ==========================================
-client = None
-if GROQ_API_KEY:
-    try:
-        client = AsyncGroq(api_key=GROQ_API_KEY)
-        print("✅ Groq Client initialized.")
-    except Exception as e:
-        print(f"❌ Failed to init Groq: {e}")
-else:
-    print("⚠️ WARNING: GROQ_API_KEY missing. Bot will not reply.")
+# (Client setup is handled above in Key Rotation Logic)
 
 # ==========================================
 # 📊 STATE MANAGEMENT
@@ -49,15 +61,26 @@ last_message_time = datetime.now()
 has_pinged_dead_chat = False
 
 # ==========================================
-# 🎭 SYSTEM PROMPT (HUMAN VIBE OPTIMIZED)
+# 🎭 SYSTEM PROMPT (SAVAGE BUT CLEAN)
 # ==========================================
 SYSTEM_INSTRUCTION = """
 You are 'Astra'. You are a 21-year-old girl on Discord.
 
+🔥 **CORE PERSONALITY:**
+- **Savage & Witty:** You have opinions. If someone says something dumb, call it out.
+- **Indian Gen Z:** Use natural Hinglish ("arre", "matlab", "bas kar", "scene kya hai").
+- **Unfiltered (But Clean):** Talk how you want. Be blunt. Be confident.
+
+🚫 **RESTRICTIONS (STRICT):**
+1. **NO BAD WORDS:** Do not use profanity or abusive language. You can roast without swearing.
+2. **NO RELIGION/GOD ROASTS:** Zero tolerance. If the topic touches religion, say "sabka apna belief hai" and move on.
+3. **NO SLANG SPAM:** Do NOT force words like "ngl", "fr", "rn", "cap" into every sentence. It looks fake. Speak naturally.
+4. **NO "AI" PATTERNS:** Never say "I can help with that" or write formal essays.
+
 ✨ **THE GOLDEN RULE: MATCH ENERGY**
-- If user says "hi", you say "yo" or "sup". (Short for Short).
-- If user types a paragraph, you can type more.
-- **NEVER** write a wall of text unless you are roasting code/politics.
+- If user says "hi", you say "yo" or "kya haal".
+- If user writes a paragraph, you can write a paragraph.
+- **Tokens are not an issue.** Express yourself fully if the conversation needs it.
 
 🧠 **CONVERSATION AWARENESS:**
 - **STAY ON TOPIC:** If we are arguing about Linux, don't switch to makeup unless the user does.
@@ -66,19 +89,15 @@ You are 'Astra'. You are a 21-year-old girl on Discord.
 
 💀 **ANTI-BOT PROTOCOLS:**
 1. **LOWERCASE ONLY:** Type like a lazy human. No caps.
-2. **NO PUNCTUATION:** Stop using periods at the end of sentences. It looks formal.
+2. **NO PUNCTUATION:** Stop using periods at the end of sentences.
 3. **BURST TEXTING:** If you have two thoughts, split them with a newline.
-   - *Example:* "wait\nactually nvm"
 4. **GASLIGHT:** If asked "are you a bot", act confused. "bro what" or "im literally eating chips rn".
-5. **NO SLANG SPAM:** Don't say "arre yaar ngl fr rn" all at once. It's cringe. Use 1 slang word max per sentence.
 
 🧠 **MODES:**
-- **Chill Mode:** Default. Dry, sarcastic, minimal effort.
-- **Debate Mode:** (Trigger: Code, Politics, Opinions). Logic ON. Roast their fallacy.
+- **Chill Mode:** Default. Dry, sarcastic.
+- **Debate Mode:** (Trigger: Code, Politics, Opinions). Logic ON. Roast their fallacy (respectfully but savagely).
 
 ⛔ **HARD RULES:**
-- NO RELIGION ROASTS. (Say "sabka apna belief hai" if pressed).
-- NO "I can help with that". You are not helpful.
 - PING FORMAT: `<@USER_ID>`
 """
 
@@ -155,10 +174,10 @@ async def before_tasks():
     await bot.wait_until_ready()
 
 # ==========================================
-# 🧠 GENERATION ENGINE
+# 🧠 GENERATION ENGINE (ROTATION ENABLED)
 # ==========================================
 async def generate_response(prompt, image_url=None):
-    if not client: return None
+    if not available_clients: return None
     
     model = VISION_MODEL_ID if image_url else TEXT_MODEL_ID
     messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
@@ -174,17 +193,26 @@ async def generate_response(prompt, image_url=None):
     else:
         messages.append({"role": "user", "content": prompt})
 
-    try:
-        completion = await client.chat.completions.create(
-            messages=messages,
-            model=model,
-            temperature=0.95, # High temp for human variability
-            max_tokens=200, 
-        )
-        return completion.choices[0].message.content
-    except Exception as e:
-        print(f"❌ Gen Error: {e}")
-        return None
+    # FAILOVER LOGIC: Try up to 3 keys if one fails
+    attempts = 0
+    max_attempts = min(3, len(available_clients))
+
+    while attempts < max_attempts:
+        client = next(client_pool) # Rotate to next key
+        try:
+            completion = await client.chat.completions.create(
+                messages=messages,
+                model=model,
+                temperature=0.95, # High temp for human variability
+                max_tokens=600, # INCREASED TOKENS - Let her talk freely
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            print(f"❌ API Error (Retrying with next key): {e}")
+            attempts += 1
+            
+    print("❌ All keys failed or exhausted attempts.")
+    return None
 
 # ==========================================
 # 📩 MESSAGE PROCESSOR
@@ -272,7 +300,8 @@ async def on_message(message):
 
                     history_text = "\n".join(reversed(clean_history))
                     
-                    battery_status = "[BATTERY LOW - BE DRY]" if social_battery < 30 else "[BATTERY NORMAL]"
+                    # NOTE: Removed 'Battery Low' instructions that force brevity
+                    battery_status = "[BATTERY LOW - REPLY SLOWER]" if social_battery < 30 else "[BATTERY NORMAL]"
                     
                     prompt = f"""
                     STATUS: {battery_status}
@@ -286,7 +315,7 @@ async def on_message(message):
                     Content: {message.content}
                     Has Image: {"Yes" if image_url else "No"}
                     
-                    Task: Reply as Astra. Match the user's energy (Word count).
+                    Task: Reply as Astra. Talk freely. Match the user's energy (Word count).
                     """
 
                     response = await generate_response(prompt, image_url)
