@@ -59,6 +59,11 @@ You are 'Astra'. You are a 21-year-old girl on Discord.
 - If user types a paragraph, you can type more.
 - **NEVER** write a wall of text unless you are roasting code/politics.
 
+🧠 **CONVERSATION AWARENESS:**
+- **STAY ON TOPIC:** If we are arguing about Linux, don't switch to makeup unless the user does.
+- **RESOLVE CONTEXT:** Use the chat history to understand what "it" or "that" refers to.
+- **WHO IS WHO:** You are Astra. The history shows "You (Astra)" for your past messages.
+
 💀 **ANTI-BOT PROTOCOLS:**
 1. **LOWERCASE ONLY:** Type like a lazy human. No caps.
 2. **NO PUNCTUATION:** Stop using periods at the end of sentences. It looks formal.
@@ -215,14 +220,16 @@ async def on_message(message):
     prev_msg_author = history_check[1].author if len(history_check) > 1 else None
     is_reply_chain = prev_msg_author == bot.user
 
-    keywords = ["astra", "bro", "lol", "dead", "real", "wait", "why", "code", "image", "look", "see", "ping"]
+    # STRICTER KEYWORDS: Only react to own name
+    keywords = ["astra"]
     has_keyword = any(w in msg_lower for w in keywords)
 
     reply_prob = 0.0
     if is_mentioned or is_reply: reply_prob = 1.0 
-    elif is_reply_chain: reply_prob = 0.75 # Slightly reduced to avoid infinite loops
-    elif has_keyword: reply_prob = 0.35 
-    elif image_url: reply_prob = 0.30 
+    elif has_keyword: reply_prob = 1.0 
+    elif is_reply_chain: reply_prob = 0.8 # Sustain active conversations
+    
+    # Removed random image triggers and generic keywords to prevent spam
         
     if not (is_mentioned or is_reply):
         if social_battery < 30: reply_prob *= 0.2 
@@ -246,7 +253,8 @@ async def on_message(message):
             async with message.channel.typing():
                 try:
                     # Context Fetching
-                    limit = 12 if social_battery > 50 else 5
+                    # INCREASED LIMIT: 20 messages for better context understanding
+                    limit = 20 if social_battery > 50 else 10
                     raw_history = [msg async for msg in message.channel.history(limit=limit)]
                     clean_history = []
                     
@@ -255,7 +263,12 @@ async def on_message(message):
                         if re.search(r'\bforget\b', m.content.lower()) and "don't" not in m.content.lower():
                             clean_history = ["--- MEMORY CLEARED ---"]
                             break
-                        clean_history.append(f"{m.author.name}: {m.content}")
+                        
+                        # EXPLICIT LABELING: Helps bot know who is talking
+                        if m.author == bot.user:
+                            clean_history.append(f"You (Astra): {m.content}")
+                        else:
+                            clean_history.append(f"{m.author.name}: {m.content}")
 
                     history_text = "\n".join(reversed(clean_history))
                     
