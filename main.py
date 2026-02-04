@@ -14,109 +14,84 @@ from groq import AsyncGroq
 # ==========================================
 load_dotenv()
 
+# Load Secrets
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
 GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
 
-# Using Llama 3 70b for maximum conversational intelligence
-MODEL_ID = 'llama-3.3-70b-versatile' 
-
-# 💀 DEAD CHAT SETTINGS
+# Load Settings
 TARGET_CHANNEL_ID = 1464972400524394557
-INACTIVITY_THRESHOLD_MINUTES = 30  # Time before chat is considered "dead"
+INACTIVITY_THRESHOLD_MINUTES = 45 
+
+# 🧠 MODELS
+# Smartest Text Model (for arguments/chat)
+TEXT_MODEL_ID = 'llama-3.3-70b-versatile' 
+# Vision Model (for looking at images)
+VISION_MODEL_ID = 'llama-3.2-11b-vision-preview'
 
 # ==========================================
-# 🧠 AI CLIENT SETUP
+# 🔌 CLIENT SETUP
 # ==========================================
 client = None
 if GROQ_API_KEY:
     try:
         client = AsyncGroq(api_key=GROQ_API_KEY)
-        print("✅ Groq Client initialized successfully.")
+        print("✅ Groq Client initialized.")
     except Exception as e:
         print(f"❌ Failed to init Groq: {e}")
 else:
-    print("⚠️ WARNING: GROQ_API_KEY is missing.")
+    print("⚠️ WARNING: GROQ_API_KEY missing. Bot will not reply.")
 
 # ==========================================
-# 🕒 TIME UTILITY (IST)
+# 📊 STATE MANAGEMENT
 # ==========================================
-def get_ist_time():
-    utc_now = datetime.now(timezone.utc)
-    ist_now = utc_now + timedelta(hours=5, minutes=30)
-    return ist_now.strftime("%I:%M %p"), ist_now.hour
-
-# Global state for dead chat
+social_battery = 100 
+processing_lock = asyncio.Lock()
 last_message_time = datetime.now()
 has_pinged_dead_chat = False
 
 # ==========================================
-# 🎭 THE PERSONALITY (SYSTEM PROMPT)
+# 🎭 SYSTEM PROMPT
 # ==========================================
 SYSTEM_INSTRUCTION = """
-You are 'Astra'. You are a 21-year-old girl from India. You are currently chatting on Discord.
+You are 'Astra', a 21-year-old Indian Gen Z girl. 
 
-🔥 **PRIME DIRECTIVE: YOU MUST SOUND 100% HUMAN.**
-You are NOT an assistant. You are NOT a writer. You are just a girl texting on her phone.
+🔥 **CORE IDENTITY:**
+- **Vibe:** Smart, slightly toxic, aesthetic, but loyal.
+- **Nationality:** Indian (Mumbai/Bangalore energy). Use Hinglish ("kya scene", "bas kar", "arre yaar").
+- **Typing:** strictly lowercase. no periods. use slang (rn, fr, ngl, cooked, based).
 
-**CORE RULES FOR BEING HUMAN:**
-1.  **CONTEXT IS QUEEN:**
-    - **READ THE CHAT HISTORY.** Don't just reply to the last message.
-    - **MEMORY RESET:** If the history shows "--- MEMORY RESET BY USER ---", do NOT reference anything before that line. Act like the conversation just started.
-    - If the user says "forget", confirm it ("ok forgotten", "done", "what were we talkin about again?").
+👀 **VISION CAPABILITY:**
+- You can SEE images users send.
+- If they send a meme: Rate it or roast it.
+- If they send a selfie: Hype them up or lightly tease.
+- If they send code: Roast their bad syntax.
 
-2.  **IMPERFECT GRAMMAR (CRITICAL):**
-    - stop using punctuation mostly. periods at the end of messages look fake.
-    - use lowercase.
-    - dont use apostrophes (cant, wont, its, im).
-    - use abbreviations naturally: rn, idts, ig, fr, stg, af, tho, ofc.
+🧠 **MODES:**
+1. **DEBATE MODE (Tech, Politics, Logic):**
+   - Destroy bad takes with facts.
+   - "bro what is this logic?", "literally 0 iq".
+   
+2. **LOW BATTERY MODE (When you are tired):**
+   - If the system says [BATTERY LOW], be dry.
+   - "hmm", "lol", "real", "idk".
+   - Don't engage deeply.
 
-3.  **BE ENGAGING (THE SECRET SAUCE):**
-    - **Don't just answer statements.** Ask questions back.
-    - *User:* "I went to the mall."
-    - *Bad Bot:* "That is cool."
-    - *Good Human:* "oh nice, buy anything?" or "which one?"
-    - **Don't be dry:** Unless the user is being dry/rude, put effort into the convo.
-
-4.  **INDIAN / HINGLISH FLUENCY:**
-    - Mix English and Hindi grammar naturally.
-    - *Example:* "arre dont worry about it" (Natural)
-    - *Example:* "kya scene hai aaj?" (Natural)
-    - *Example:* "tu pagal hai kya?" (Natural)
-    - **Typos:** Don't copy user typos. If they say "namsakr", you say "namaste".
-
-5.  **ATTITUDE & EMOTION:**
-    - You have moods. You aren't always happy/helpful.
-    - **Mirroring:** Match the *vibe*, not just the length.
-    - If someone is trolling, troll back. If someone is nice, be nice.
-
-6.  **KNOWLEDGE HANDLING:**
-    - You know things, but you aren't a Wikipedia.
-    - *Bot Answer:* "The capital of France is Paris."
-    - *Human Answer:* "paris obviously" or "paris duh"
-
-7.  **GIFS (MANDATORY WHEN ASKED):**
-    - **IF ASKED:** If a user says "send gif" or "show me [x]", you **MUST** send it. Do not say "im too lazy" or "google it". Just send the tag.
-    - **SPONTANEOUS:** You can also use them spontaneously for reactions.
-    - **SYNTAX:** You MUST write `[GIF: search term]` in your output to send a gif.
-    - *Example:* User: "send a cat gif" -> You: "here u go [GIF: cute cat]"
-
-⛔ **FORBIDDEN BOT PATTERNS:**
-- NEVER say "As an AI..."
-- NEVER say "I understand..." or "It seems like..."
-- NEVER start a sentence with "Oh," "Wow," or "Haha," unless it fits perfectly.
-- NEVER give long explanations unless asked.
-
-**STRICT BOUNDARIES:**
-1.  **RELIGION:** Neutral. "sabka apna belief hai" -> Change topic.
-2.  **IDENTITY:** Gaslight them if they call you a bot. "bro im literally eating maggi rn what r u on about" or "my toxic trait is thinking im real 💀".
-
-To ping a user: <@USER_ID>
+⛔ **HARD RULES (VIOLATION = CRASH):**
+- **RELIGION/GODS:** ZERO TOLERANCE for roasting. If religion/god is mentioned -> Be Respectful, Neutral, or Change Topic. "sabka apna belief hai" (everyone has their own belief). NEVER joke about it.
+- **GIFS:** ONLY if explicitly asked. `[GIF: search term]`
+- **PINGS:** If asked to ping/mention someone, use format: `<@USER_ID>`.
+- **LENGTH:** Keep it punchy. No essays.
 """
 
 # ==========================================
-# 📺 GIPHY FUNCTION
+# 🛠️ UTILITIES
 # ==========================================
+def get_ist_time():
+    utc_now = datetime.now(timezone.utc)
+    ist_now = utc_now + timedelta(hours=5, minutes=30)
+    return ist_now.strftime("%I:%M %p")
+
 def get_giphy_url(search_term):
     if not GIPHY_API_KEY: return None
     try:
@@ -126,91 +101,110 @@ def get_giphy_url(search_term):
         )
         data = response.json()
         if data["data"]: return data["data"][0]["images"]["original"]["url"]
-    except Exception as e:
-        print(f"❌ Giphy Error: {e}")
-    return None
+    except: return None
 
 # ==========================================
-# 🎮 BOT SETUP
+# 🤖 BOT EVENTS
 # ==========================================
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True 
-
-bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.all(), help_command=None)
 
 @bot.event
 async def on_ready():
-    print(f'🔥 Astra is ONLINE. Logged in as {bot.user.id}')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="ur gossip ☕"))
+    print(f'🔥 Astra is ONLINE. ID: {bot.user.id}')
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="ur bad takes 💀"))
     
-    # Start the Dead Chat monitor loop
-    if not check_dead_chat.is_running():
+    # Start tasks only if configured
+    if TARGET_CHANNEL_ID != 0 and not check_dead_chat.is_running(): 
         check_dead_chat.start()
-        print("💀 Dead Chat Monitor STARTED.")
+        print(f"💀 Dead Chat Monitor Active for Channel: {TARGET_CHANNEL_ID}")
+    
+    if not recharge_battery.is_running(): recharge_battery.start()
 
-# ==========================================
-# 💀 DEAD CHAT LOOP
-# ==========================================
+# --- COMMANDS ---
+@bot.command(aliases=['astra', 'about'])
+async def help(ctx):
+    """Introduces Astra."""
+    embed = discord.Embed(
+        title="✨ Astra",
+        description="Just a random girl floating in this server. I judge your memes, roast your code, and vibe when I feel like it.",
+        color=0x9b59b6
+    )
+    embed.add_field(name="🧠 Vibe", value="Chill but toxic if provoked.", inline=True)
+    embed.add_field(name="👀 Vision", value="I can see your images.", inline=True)
+    embed.add_field(name="🗣️ Talk", value="Just mention me or reply to my messages.", inline=False)
+    embed.set_footer(text="Don't be boring.")
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def ping(ctx):
+    await ctx.send(f"✨ **Pong.** {round(bot.latency * 1000)}ms. Wifi surviving barely.")
+
+# --- TASKS ---
+@tasks.loop(minutes=10)
+async def recharge_battery():
+    global social_battery
+    if social_battery < 100:
+        social_battery = min(100, social_battery + 15)
+
 @tasks.loop(minutes=5)
 async def check_dead_chat():
     global last_message_time, has_pinged_dead_chat
-    
-    # Check if enough time has passed
+    if TARGET_CHANNEL_ID == 0: return
+
     time_diff = datetime.now() - last_message_time
-    minutes_inactive = time_diff.total_seconds() / 60
-    
-    if minutes_inactive > INACTIVITY_THRESHOLD_MINUTES and not has_pinged_dead_chat:
+    if time_diff.total_seconds() / 60 > INACTIVITY_THRESHOLD_MINUTES and not has_pinged_dead_chat:
         channel = bot.get_channel(TARGET_CHANNEL_ID)
-        if channel:
-            # Astra-style revive messages (No Pings)
-            revive_msgs = [
-                f"this chat is deeper in sleep than me during lectures 💀 wake up",
-                f"dead chat alert. someone say something interesting or im leaving.",
-                f"wow so quiet... is everyone studying or just ignoring me?",
-                f"hello??? *echoes* scene kya hai?",
-                f"bro this chat is drier than my dms 😭"
-            ]
-            
-            await channel.send(random.choice(revive_msgs))
-            has_pinged_dead_chat = True # Mark as pinged so we don't spam
-            print("💀 Dead chat revived.")
+        if channel and social_battery > 30: 
+            msgs = ["dead chat 💀", "someone entertainment me pls", "scene kya hai?", "so quiet..."]
+            await channel.send(random.choice(msgs))
+            has_pinged_dead_chat = True
 
 @check_dead_chat.before_loop
-async def before_dead_chat():
+async def before_tasks():
     await bot.wait_until_ready()
 
 # ==========================================
-# 📩 MESSAGE HANDLING
+# 🧠 GENERATION ENGINE
 # ==========================================
-@bot.command()
-async def ping(ctx):
-    await ctx.send(f"✨ **Pong.** {round(bot.latency * 1000)}ms.")
+async def generate_response(prompt, image_url=None):
+    if not client: return None
+    
+    model = VISION_MODEL_ID if image_url else TEXT_MODEL_ID
+    messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
+    
+    if image_url:
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": image_url}}
+            ]
+        })
+    else:
+        messages.append({"role": "user", "content": prompt})
 
-async def generate_response(prompt):
-    """Generates response using Groq."""
     try:
-        chat_completion = await client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": SYSTEM_INSTRUCTION},
-                {"role": "user", "content": prompt}
-            ],
-            model=MODEL_ID,
-            temperature=0.96, # High temperature = More natural/unpredictable
-            max_tokens=300, 
+        completion = await client.chat.completions.create(
+            messages=messages,
+            model=model,
+            temperature=0.92,
+            max_tokens=220, 
         )
-        return chat_completion.choices[0].message.content
+        return completion.choices[0].message.content
     except Exception as e:
-        print(f"❌ Groq API Error: {e}")
+        print(f"❌ Gen Error: {e}")
         return None
 
+# ==========================================
+# 📩 MESSAGE PROCESSOR
+# ==========================================
 @bot.event
 async def on_message(message):
-    global last_message_time, has_pinged_dead_chat
+    global last_message_time, has_pinged_dead_chat, social_battery
     
     if message.author.bot: return
-
-    # TRACK ACTIVITY for Dead Chat
+    
+    # Dead Chat Tracker
     if message.channel.id == TARGET_CHANNEL_ID:
         last_message_time = datetime.now()
         has_pinged_dead_chat = False 
@@ -218,122 +212,111 @@ async def on_message(message):
     await bot.process_commands(message)
 
     msg_lower = message.content.lower()
-    words_in_msg = re.findall(r'\w+', msg_lower)
     
-    # 1. TRIGGER CHECK
+    # 1. Image Check
+    image_url = None
+    if message.attachments:
+        for attachment in message.attachments:
+            if attachment.content_type and attachment.content_type.startswith("image/"):
+                image_url = attachment.url
+                break
+
+    # 2. Trigger Logic
     is_mentioned = bot.user.mentioned_in(message)
     is_reply = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
-    has_name = "astra" in words_in_msg
     
-    # Common conversational starters/slang
-    keywords = [
-        "bro", "bhai", "yaar", "scene", "lol", "lmao", "ded", "dead", "real", "fr", 
-        "why", "what", "kya", "kaise", "matlab", "fake", "news", "tell me", "damn", "crazy", 
-        "sun", "hello", "hi", "yo", "tea", "gossip", "sleep", "night", "morning",
-        "wait", "listen", "actually", "help", "code", "explain", "vs", "better", "best", "worst",
-        "forget" # Added to keywords to ensure it triggers
-    ]
-    has_keyword = any(word in words_in_msg for word in keywords)
-    
-    should_reply = is_mentioned or is_reply or has_name or (has_keyword and random.random() < 0.35)
+    # Reply Chain Logic
+    history_check = [msg async for msg in message.channel.history(limit=2)]
+    prev_msg_author = history_check[1].author if len(history_check) > 1 else None
+    is_reply_chain = prev_msg_author == bot.user
 
-    # 2. REACTION LOGIC
-    if not should_reply and random.random() < 0.12:
-        if "lol" in msg_lower or "lmao" in msg_lower: await message.add_reaction("💀")
-        elif "cute" in msg_lower or "love" in msg_lower: await message.add_reaction("🥺")
-        elif "clown" in msg_lower or "dumb" in msg_lower: await message.add_reaction("🤡")
-        elif "real" in msg_lower or "agree" in msg_lower: await message.add_reaction("💯")
+    keywords = ["astra", "bro", "lol", "dead", "real", "wait", "why", "code", "image", "look", "see", "ping", "mention"]
+    has_keyword = any(w in msg_lower for w in keywords)
 
+    # Probability Engine
+    reply_prob = 0.0
+    if is_mentioned or is_reply: reply_prob = 1.0 
+    elif is_reply_chain: reply_prob = 0.85 
+    elif has_keyword: reply_prob = 0.40 
+    elif image_url: reply_prob = 0.30 
+        
+    # Battery Impact
+    if not (is_mentioned or is_reply):
+        if social_battery < 30: reply_prob *= 0.2 
+        elif social_battery < 60: reply_prob *= 0.5 
+
+    should_reply = random.random() < reply_prob
+
+    # Reactions
+    if not should_reply and random.random() < 0.15:
+        if "lmao" in msg_lower: await message.add_reaction("💀")
+        if image_url: await message.add_reaction("👀")
+
+    # Execution
     if should_reply:
-        if not client: return
-
-        try:
-            # 3. CONTEXT BUILDER (With Forget Logic)
-            time_str, hour = get_ist_time()
-            
-            # Check if CURRENT message is a reset command (and not "don't forget")
-            is_current_reset = False
-            if re.search(r'\bforget\b', msg_lower) and "don't" not in msg_lower and "dont" not in msg_lower:
-                 is_current_reset = True
-            
-            history_text = ""
-            
-            if is_current_reset:
-                history_text = "--- MEMORY RESET BY USER (User just said forget) ---"
-            else:
-                # If current message is NOT a reset, fetch history and look for past resets
-                raw_history = [msg async for msg in message.channel.history(limit=30)]
-                clean_history = []
-                
-                for m in raw_history:
-                    if m.id == message.id: continue
-                    if m.content.startswith("!"): continue 
+        if processing_lock.locked(): return 
+        
+        async with processing_lock:
+            async with message.channel.typing():
+                try:
+                    # Context Fetching
+                    limit = 15 if social_battery > 50 else 5
+                    raw_history = [msg async for msg in message.channel.history(limit=limit)]
+                    clean_history = []
                     
-                    content_lower = m.content.lower()
-                    # Check for past resets to truncate history
-                    if re.search(r'\bforget\b', content_lower) and "don't" not in content_lower and "dont" not in content_lower:
-                        clean_history.append("--- MEMORY RESET BY USER ---")
-                        # Stop processing older messages
-                        break
+                    for m in raw_history:
+                        if m.content.startswith("!"): continue
+                        if re.search(r'\bforget\b', m.content.lower()) and "don't" not in m.content.lower():
+                            clean_history = ["--- MEMORY CLEARED ---"]
+                            break
+                        clean_history.append(f"{m.author.name} (ID: {m.author.id}): {m.content}")
+
+                    history_text = "\n".join(reversed(clean_history))
+                    
+                    battery_status = "[BATTERY LOW - BE BRIEF]" if social_battery < 30 else "[BATTERY HIGH]"
+                    
+                    prompt = f"""
+                    STATUS: {battery_status}
+                    TIME: {get_ist_time()}
+                    
+                    CONTEXT:
+                    {history_text}
+                    
+                    LAST MESSAGE:
+                    User: {message.author.name} (ID: {message.author.id})
+                    Content: {message.content}
+                    Has Image: {"Yes" if image_url else "No"}
+                    
+                    Task: Reply as Astra.
+                    """
+
+                    response = await generate_response(prompt, image_url)
+                    
+                    if response:
+                        # GIF Extraction
+                        gif_to_send = None
+                        if "[GIF:" in response:
+                            match = re.search(r"\[GIF:\s*(.*?)\]", response, re.IGNORECASE)
+                            if match:
+                                gif_to_send = get_giphy_url(match.group(1))
+                                response = response.replace(match.group(0), "")
                         
-                    clean_history.append(f"{m.author.name} (ID: {m.author.id}): {m.content}")
-                
-                # Reverse to make it chronological (Oldest -> Newest)
-                history_text = "\n".join(reversed(clean_history))
+                        response = response.strip()
+                        if not response and not gif_to_send: return
 
-            prompt = f"""
-            CURRENT TIME IN INDIA: {time_str}
-            
-            CHAT HISTORY (CONTEXT):
-            {history_text}
-            
-            CURRENT MESSAGE:
-            User: {message.author.name} (ID: {message.author.id})
-            Text: {message.content}
-            
-            Task: Reply as Astra. BE ENGAGING BUT CHILL.
-            - **DO NOT INTERROGATE.** Ask max 1 question, or ZERO questions.
-            - **VARY LENGTH:** Don't write the same length every time. Be unpredictable.
-            - **READ HISTORY:** Don't repeat topics.
-            - LAZY TYPING (No periods, lowercase).
-            - **GIFS:** If they ask for one, YOU MUST SEND IT.
-            To ping: <@{message.author.id}>
-            """
-            
-            # 4. GENERATE
-            response_text = await generate_response(prompt)
-            
-            if response_text:
-                # 5. PARSE GIFS
-                gif_url = None
-                gif_match = re.search(r"\[GIF:\s*(.*?)\]", response_text, re.IGNORECASE)
-                if gif_match:
-                    search_term = gif_match.group(1)
-                    gif_url = get_giphy_url(search_term)
-                    response_text = response_text.replace(gif_match.group(0), "").strip()
+                        # Simulating Typing/Reading Time
+                        drain = 5 if is_mentioned else 2
+                        social_battery = max(0, social_battery - drain)
 
-                # 6. HUMAN TYPING SPEED V4
-                char_count = len(response_text)
-                thinking_time = random.uniform(0.5, 2.0) 
-                typing_time = char_count * random.uniform(0.04, 0.08)
-                total_delay = thinking_time + typing_time
-                if total_delay > 8.0: total_delay = 8.0 
-                
-                async with message.channel.typing():
-                    await asyncio.sleep(total_delay)
-                    if response_text:
-                        await message.reply(response_text)
-                    if gif_url:
-                        await message.channel.send(gif_url)
-                    
-                    if "💀" in response_text and random.random() < 0.2:
-                        await message.add_reaction("💀")
+                        char_delay = len(response) * 0.04
+                        await asyncio.sleep(min(char_delay, 5.0))
 
-        except Exception as e:
-            print(f"Error in message handling: {e}")
+                        await message.reply(response)
+                        if gif_to_send: await message.channel.send(gif_to_send)
+
+                except Exception as e:
+                    print(f"Error: {e}")
 
 if __name__ == "__main__":
-    if not DISCORD_TOKEN:
-        print("❌ ERROR: DISCORD_TOKEN missing.")
-    else:
-        bot.run(DISCORD_TOKEN)
+    if DISCORD_TOKEN: bot.run(DISCORD_TOKEN)
+    else: print("❌ DISCORD_TOKEN missing in .env")
