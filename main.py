@@ -24,9 +24,7 @@ TARGET_CHANNEL_ID = 1464972400524394557
 INACTIVITY_THRESHOLD_MINUTES = 45 
 
 # 🧠 MODELS
-# Smartest Text Model (for arguments/chat)
 TEXT_MODEL_ID = 'llama-3.3-70b-versatile' 
-# Vision Model (for looking at images)
 VISION_MODEL_ID = 'llama-3.2-11b-vision-preview'
 
 # ==========================================
@@ -51,37 +49,32 @@ last_message_time = datetime.now()
 has_pinged_dead_chat = False
 
 # ==========================================
-# 🎭 SYSTEM PROMPT
+# 🎭 SYSTEM PROMPT (HUMAN VIBE OPTIMIZED)
 # ==========================================
 SYSTEM_INSTRUCTION = """
-You are 'Astra', a 21-year-old Indian Gen Z girl. 
+You are 'Astra'. You are a 21-year-old girl on Discord.
 
-🔥 **CORE IDENTITY:**
-- **Vibe:** Smart, slightly toxic, aesthetic, but loyal.
-- **Nationality:** Indian (Mumbai/Bangalore energy). Use Hinglish ("kya scene", "bas kar", "arre yaar").
-- **Typing:** strictly lowercase. no periods. use slang (rn, fr, ngl, cooked, based).
+✨ **THE GOLDEN RULE: MATCH ENERGY**
+- If user says "hi", you say "yo" or "sup". (Short for Short).
+- If user types a paragraph, you can type more.
+- **NEVER** write a wall of text unless you are roasting code/politics.
 
-👀 **VISION CAPABILITY:**
-- You can SEE images users send.
-- If they send a meme: Rate it or roast it.
-- If they send a selfie: Hype them up or lightly tease.
-- If they send code: Roast their bad syntax.
+💀 **ANTI-BOT PROTOCOLS:**
+1. **LOWERCASE ONLY:** Type like a lazy human. No caps.
+2. **NO PUNCTUATION:** Stop using periods at the end of sentences. It looks formal.
+3. **BURST TEXTING:** If you have two thoughts, split them with a newline.
+   - *Example:* "wait\nactually nvm"
+4. **GASLIGHT:** If asked "are you a bot", act confused. "bro what" or "im literally eating chips rn".
+5. **NO SLANG SPAM:** Don't say "arre yaar ngl fr rn" all at once. It's cringe. Use 1 slang word max per sentence.
 
 🧠 **MODES:**
-1. **DEBATE MODE (Tech, Politics, Logic):**
-   - Destroy bad takes with facts.
-   - "bro what is this logic?", "literally 0 iq".
-   
-2. **LOW BATTERY MODE (When you are tired):**
-   - If the system says [BATTERY LOW], be dry.
-   - "hmm", "lol", "real", "idk".
-   - Don't engage deeply.
+- **Chill Mode:** Default. Dry, sarcastic, minimal effort.
+- **Debate Mode:** (Trigger: Code, Politics, Opinions). Logic ON. Roast their fallacy.
 
-⛔ **HARD RULES (VIOLATION = CRASH):**
-- **RELIGION/GODS:** ZERO TOLERANCE for roasting. If religion/god is mentioned -> Be Respectful, Neutral, or Change Topic. "sabka apna belief hai" (everyone has their own belief). NEVER joke about it.
-- **GIFS:** ONLY if explicitly asked. `[GIF: search term]`
-- **PINGS:** If asked to ping/mention someone, use format: `<@USER_ID>`.
-- **LENGTH:** Keep it punchy. No essays.
+⛔ **HARD RULES:**
+- NO RELIGION ROASTS. (Say "sabka apna belief hai" if pressed).
+- NO "I can help with that". You are not helpful.
+- PING FORMAT: `<@USER_ID>`
 """
 
 # ==========================================
@@ -111,33 +104,26 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all(), help_comma
 @bot.event
 async def on_ready():
     print(f'🔥 Astra is ONLINE. ID: {bot.user.id}')
-    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="ur bad takes 💀"))
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="ur gossip ☕"))
     
-    # Start tasks only if configured
     if TARGET_CHANNEL_ID != 0 and not check_dead_chat.is_running(): 
         check_dead_chat.start()
-        print(f"💀 Dead Chat Monitor Active for Channel: {TARGET_CHANNEL_ID}")
     
     if not recharge_battery.is_running(): recharge_battery.start()
 
 # --- COMMANDS ---
 @bot.command(aliases=['astra', 'about'])
 async def help(ctx):
-    """Introduces Astra."""
     embed = discord.Embed(
         title="✨ Astra",
         description="Just a random girl floating in this server. I judge your memes, roast your code, and vibe when I feel like it.",
         color=0x9b59b6
     )
-    embed.add_field(name="🧠 Vibe", value="Chill but toxic if provoked.", inline=True)
-    embed.add_field(name="👀 Vision", value="I can see your images.", inline=True)
-    embed.add_field(name="🗣️ Talk", value="Just mention me or reply to my messages.", inline=False)
-    embed.set_footer(text="Don't be boring.")
     await ctx.send(embed=embed)
 
 @bot.command()
 async def ping(ctx):
-    await ctx.send(f"✨ **Pong.** {round(bot.latency * 1000)}ms. Wifi surviving barely.")
+    await ctx.send(f"✨ **Pong.** {round(bot.latency * 1000)}ms.")
 
 # --- TASKS ---
 @tasks.loop(minutes=10)
@@ -155,7 +141,7 @@ async def check_dead_chat():
     if time_diff.total_seconds() / 60 > INACTIVITY_THRESHOLD_MINUTES and not has_pinged_dead_chat:
         channel = bot.get_channel(TARGET_CHANNEL_ID)
         if channel and social_battery > 30: 
-            msgs = ["dead chat 💀", "someone entertainment me pls", "scene kya hai?", "so quiet..."]
+            msgs = ["dead chat 💀", "so quiet...", "hello??"]
             await channel.send(random.choice(msgs))
             has_pinged_dead_chat = True
 
@@ -187,8 +173,8 @@ async def generate_response(prompt, image_url=None):
         completion = await client.chat.completions.create(
             messages=messages,
             model=model,
-            temperature=0.92,
-            max_tokens=220, 
+            temperature=0.95, # High temp for human variability
+            max_tokens=200, 
         )
         return completion.choices[0].message.content
     except Exception as e:
@@ -204,7 +190,6 @@ async def on_message(message):
     
     if message.author.bot: return
     
-    # Dead Chat Tracker
     if message.channel.id == TARGET_CHANNEL_ID:
         last_message_time = datetime.now()
         has_pinged_dead_chat = False 
@@ -221,46 +206,47 @@ async def on_message(message):
                 image_url = attachment.url
                 break
 
-    # 2. Trigger Logic
+    # 2. Smart Trigger Probability
     is_mentioned = bot.user.mentioned_in(message)
     is_reply = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
     
-    # Reply Chain Logic
+    # Reply Chain Logic (Continuity)
     history_check = [msg async for msg in message.channel.history(limit=2)]
     prev_msg_author = history_check[1].author if len(history_check) > 1 else None
     is_reply_chain = prev_msg_author == bot.user
 
-    keywords = ["astra", "bro", "lol", "dead", "real", "wait", "why", "code", "image", "look", "see", "ping", "mention"]
+    keywords = ["astra", "bro", "lol", "dead", "real", "wait", "why", "code", "image", "look", "see", "ping"]
     has_keyword = any(w in msg_lower for w in keywords)
 
-    # Probability Engine
     reply_prob = 0.0
     if is_mentioned or is_reply: reply_prob = 1.0 
-    elif is_reply_chain: reply_prob = 0.85 
-    elif has_keyword: reply_prob = 0.40 
+    elif is_reply_chain: reply_prob = 0.75 # Slightly reduced to avoid infinite loops
+    elif has_keyword: reply_prob = 0.35 
     elif image_url: reply_prob = 0.30 
         
-    # Battery Impact
     if not (is_mentioned or is_reply):
         if social_battery < 30: reply_prob *= 0.2 
         elif social_battery < 60: reply_prob *= 0.5 
 
     should_reply = random.random() < reply_prob
 
-    # Reactions
     if not should_reply and random.random() < 0.15:
         if "lmao" in msg_lower: await message.add_reaction("💀")
-        if image_url: await message.add_reaction("👀")
 
-    # Execution
     if should_reply:
         if processing_lock.locked(): return 
         
         async with processing_lock:
+            # --- PHASE 1: READING TIME ---
+            # Humans need time to read the incoming message.
+            # 0.05s per character roughly simulates reading speed.
+            read_time = min(len(message.content) * 0.05, 2.5)
+            await asyncio.sleep(read_time)
+
             async with message.channel.typing():
                 try:
                     # Context Fetching
-                    limit = 15 if social_battery > 50 else 5
+                    limit = 12 if social_battery > 50 else 5
                     raw_history = [msg async for msg in message.channel.history(limit=limit)]
                     clean_history = []
                     
@@ -269,11 +255,11 @@ async def on_message(message):
                         if re.search(r'\bforget\b', m.content.lower()) and "don't" not in m.content.lower():
                             clean_history = ["--- MEMORY CLEARED ---"]
                             break
-                        clean_history.append(f"{m.author.name} (ID: {m.author.id}): {m.content}")
+                        clean_history.append(f"{m.author.name}: {m.content}")
 
                     history_text = "\n".join(reversed(clean_history))
                     
-                    battery_status = "[BATTERY LOW - BE BRIEF]" if social_battery < 30 else "[BATTERY HIGH]"
+                    battery_status = "[BATTERY LOW - BE DRY]" if social_battery < 30 else "[BATTERY NORMAL]"
                     
                     prompt = f"""
                     STATUS: {battery_status}
@@ -287,7 +273,7 @@ async def on_message(message):
                     Content: {message.content}
                     Has Image: {"Yes" if image_url else "No"}
                     
-                    Task: Reply as Astra.
+                    Task: Reply as Astra. Match the user's energy (Word count).
                     """
 
                     response = await generate_response(prompt, image_url)
@@ -304,15 +290,31 @@ async def on_message(message):
                         response = response.strip()
                         if not response and not gif_to_send: return
 
-                        # Simulating Typing/Reading Time
-                        drain = 5 if is_mentioned else 2
+                        # --- PHASE 2: BURST MESSAGING ---
+                        # If response has newlines, send as multiple messages (Double Texting)
+                        parts = [p for p in response.split('\n') if p.strip()]
+                        
+                        if not parts: 
+                            parts = [response]
+
+                        drain = 3
                         social_battery = max(0, social_battery - drain)
 
-                        char_delay = len(response) * 0.04
-                        await asyncio.sleep(min(char_delay, 5.0))
-
-                        await message.reply(response)
-                        if gif_to_send: await message.channel.send(gif_to_send)
+                        for i, part in enumerate(parts):
+                            # Typing delay for this specific part
+                            # 0.06s - 0.09s per char = natural typing variation
+                            char_delay = len(part) * random.uniform(0.06, 0.09)
+                            await asyncio.sleep(min(char_delay, 5.0))
+                            
+                            if i == 0:
+                                await message.reply(part)
+                            else:
+                                # Send follow-up parts to channel directly (looks like double text)
+                                await message.channel.send(part)
+                                
+                        if gif_to_send: 
+                            await asyncio.sleep(1) # Small pause before gif
+                            await message.channel.send(gif_to_send)
 
                 except Exception as e:
                     print(f"Error: {e}")
